@@ -1,0 +1,20 @@
+{
+  "name": "archnaut",
+  "version": "0.0.1",
+  "description": "AI-powered architecture management layer for agentic coding. Coming soon.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dgosc96/Archnaut.git"
+  },
+  "keywords": ["architecture", "ai", "agentic", "mcp", "diagram", "coding"],
+  "author": "Dawid Goscinski <dawid.goscinski1996@gmail.com>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/dgosc96/Archnaut/issues"
+  },
+  "homepage": "https://github.com/dgosc96/Archnaut#readme"
+}
