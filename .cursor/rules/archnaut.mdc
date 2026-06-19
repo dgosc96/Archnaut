@@ -1,0 +1,190 @@
+---
+description: Archnaut — architecture rules and project context for AI agents
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# What is Archnaut?
+
+Archnaut is a repo-installed architecture management layer for AI-assisted development.
+It is an npm package (`archnaut`) consisting of:
+- A CLI (`archnaut init/start/stop/status/scan`) built with Node.js + Commander.js
+- A background daemon that self-daemonizes (detached child, PID in `.archnaut/daemon.pid`)
+- An MCP server (Streamable HTTP on `localhost:7070/api/mcp`) using `@modelcontextprotocol/sdk`
+- A stdio shim (`mcp-shim`) that proxies JSON-RPC to the HTTP endpoint for tools requiring stdio
+- A local web UI (React + Vite SPA, pre-built, bundled inside the npm package, served via `sirv`)
+- A React Flow (`@xyflow/react`) diagram engine with ELK.js auto-layout in a Web Worker
+- A `better-sqlite3` embedded SQLite runtime store (`.archnaut/db.sqlite`, never committed)
+- A rules/hooks/skills engine that installs config files into the user's repo at `archnaut init` time
+
+All served on a single port (7070) with path-based routing:
+- `localhost:7070/`        → sirv(dist/) [static SPA]
+- `localhost:7070/api/*`   → MCP Streamable HTTP transport
+- `localhost:7070/ws`      → WebSocket (live diagram push)
+
+# Source of Truth
+
+`PROJECT.md` at the repo root is the authoritative product definition. It covers the full intended product, v0.1 vs later scope, feature specs, and design decisions. Agents and contributors should read and follow `PROJECT.md` when deciding what to build, what is in scope, and how features should behave.
+
+`CONTRIBUTING.md` is the project style guide — coding conventions, commit message format, PR workflow, and development setup. Follow it when writing code, naming commits, and structuring changes.
+
+This rule file is a condensed agent reference — on any conflict, `PROJECT.md` wins for scope and architecture; `CONTRIBUTING.md` wins for style and workflow.
+
+# Repository Structure
+
+This is a Node.js monorepo. Package manager: pnpm workspaces.
+
+```
+/
+├── packages/
+│   ├── cli/           # CLI entry point — Commander.js, archnaut init/start/stop/status/scan
+│   ├── daemon/        # Self-daemonizing background process manager
+│   ├── mcp-server/    # MCP server, read-tools, write-tools
+│   ├── mcp-shim/      # Thin stdio-to-HTTP proxy shim
+│   ├── web-ui/        # React + Vite SPA (pre-built dist/ bundled into npm package)
+│   ├── rules-engine/  # Generates and installs AI tool config files
+│   └── shared/        # Shared TypeScript types and schemas
+├── PROJECT.md          # Authoritative product definition (source of truth for scope & specs)
+├── CONTRIBUTING.md     # Project style guide (coding conventions, commits, PR workflow)
+├── archnaut.json       # Canonical committed architecture artifact (do not gitignore)
+└── .archnaut/          # Runtime state — ALL gitignored (db.sqlite, daemon.pid, daemon.log)
+```
+
+# Module Boundaries — Never Cross These
+
+- `cli` may import from `daemon`, `rules-engine`, `shared` — nothing else
+- `mcp-server` may import from `shared` — NOT from `cli` or `web-ui`
+- `web-ui` may import from `shared` — NOT from `cli` or `mcp-server`
+- `daemon` has no imports from other packages — it manages process lifecycle only
+- `mcp-shim` has no imports from other packages — it is a stateless proxy
+
+# Locked Technology Decisions
+
+Do NOT suggest alternatives to these. They are decided and documented.
+
+| Concern | Decision | Rejected alternatives |
+|---|---|---|
+| Diagram engine | `@xyflow/react` (React Flow) | Cytoscape.js, D3.js |
+| Auto-layout | ELK.js `layered` in a Web Worker | dagre, cola |
+| Static serving | `sirv` SPA mode | express.static, http-server |
+| Runtime DB | `better-sqlite3` (in-process, no port) | PostgreSQL, Prisma, networked DB |
+| CLI prompts | `@clack/prompts` | inquirer, prompts |
+| MCP SDK | `@modelcontextprotocol/sdk` (official) | custom MCP implementation |
+| Default port | `7070` | 3000, 4200 (Angular conflict) |
+| Config format | JSON (`archnaut.json`) | YAML, TOML |
+| IPC sync | Chokidar file watcher → WebSocket `/ws` | polling, SSE |
+| Process model | Single background process, single port | IDE extension, per-command spawn |
+
+# Architecture Rules
+
+1. The MCP server is the **only mutation authority** for `archnaut.json` and the SQLite DB.
+2. Agents NEVER write directly to `archnaut.json` or `.archnaut/db.sqlite`.
+3. All state changes go through MCP tools owned by the server.
+4. `archnaut.json` is the canonical git-tracked artifact. The SQLite DB is a runtime projection — never committed, always rebuildable from JSON.
+5. Deterministic normalization (sort by id: workspaces → nodes → edges → concerns) runs before every write to `archnaut.json`.
+6. The daemon does NOT auto-start via git hooks or agent calls. Developer runs `archnaut start` explicitly.
+7. Pre-commit hook is a **soft warn only** — it never blocks commits.
+8. Agents do NOT spawn the daemon — they connect to an already-running daemon at `localhost:7070`.
+
+# ID Conventions
+
+- Workspace: `ws.<name>` → `ws.api`, `ws.web`
+- Component node: `cmp.<workspace>.<name>` → `cmp.api.checkout`
+- Database: `db.<name>` → `db.users`
+- External service: `ext.<name>` → `ext.stripe`
+- Queue: `queue.<name>` → `queue.events`
+- Edge: `edge.<from>-<to>` → `edge.checkout-stripe`
+
+IDs are assigned and preserved by the MCP server. Never generate IDs outside the server.
+
+# MCP Tools Reference (v0.1)
+
+**Read tools:**
+- `getarchitecture` — full architecture graph as structured context
+- `getcomponentcontext(name)` — focused context for a single component
+- `getplannedfeatures` — all components marked planned but not yet implemented
+
+**Write tools (agents call these — never direct file/DB writes):**
+- `begin_task(taskId, agentId, summary, targetNodeIds, [plannedFeatureIds])` — declare task start
+- `addnode(component)` — add a discovered or planned component
+- `addedge(from, to, type)` — add a dependency relationship
+- `setnodemetadata(id, metadata)` — enrich a node with details
+- `markimplemented(featureId)` — low-level state transition (UI-facing; agents prefer complete_task)
+- `complete_task(taskId, status, [implementedNodeIds], [notes])` — finalize task, trigger normalization
+- `updatearchitecture` — trigger full rescan prompt
+- `flagconcern(description)` — surface architectural concern for human review
+- `cleararchitecture` — reset diagram before full rescan
+
+# Agent Workflow Pattern
+
+When implementing a feature:
+1. Call `getarchitecture` to read current state (requires daemon running)
+2. Call `begin_task` with `taskId`, `agentId`, `summary`, `targetNodeIds`
+3. Implement the feature; call `addnode`/`addedge`/`setnodemetadata` as needed
+4. Call `complete_task` with `status: "completed"` and `implementedNodeIds`
+5. Never skip `complete_task` — it triggers normalization and persistence
+
+# Session handoff (`CURRENT.md`)
+
+- `CURRENT.md` is a session handoff summary, not a live log.
+- Update or regenerate it **at the end of a coherent task or session** (feature implemented, refactor completed).
+- Do NOT rewrite it on every small code change; git history captures fine‑grained edits.
+
+# v0.1 Scope — What Ships Now vs Later
+
+See `PROJECT.md` (MVP Scope section) for the full authoritative v0.1 definition. Summary below:
+
+**In v0.1 (implement these):**
+- `archnaut init/start/stop/status/scan` CLI commands
+- Self-daemonizing background process
+- MCP server with all read + write tools listed above
+- stdio shim for tools requiring subprocess transport
+- Live block diagram (React Flow + ELK.js)
+- Component inspector (click node → files, dependencies, notes)
+- Drag-and-drop planned node creation (design mode)
+- Rules/hooks/skills engine + `archnaut init` tool detection + multi-select prompt
+- Pre-commit hooks (daemon health check + stale diagram warning — both soft warns)
+- Session handoff (`CURRENT.md` generation at end of agent session)
+- Scan skill installed at `.archnaut/skills/scan.md`
+
+**Post-v0.1 — do NOT implement these now:**
+- `archnaut upgrade` (v0.2)
+- Diff view (planned vs implemented overlay)
+- Drift alerts (visual indicators)
+- Token-aware context injection
+- Anti-pattern detection
+- Real-time multi-developer collaboration (CRDT/OT)
+- `hookPolicy: block-on-daemon-down` enforcement
+- `onlyRenderVisibleElements` for 500+ node monorepos
+
+# archnaut.json Schema (v0.1 — top level)
+
+```typescript
+interface ArchnautFileV1 {
+  version: 1;
+  project: { id: string; name: string; root: string; packageManager?: "npm"|"yarn"|"pnpm"|"bun"; monorepo: boolean; };
+  workspaces: Array<{ id: string; name: string; path: string; kind: "app"|"package"|"service"|"library"; tags?: string[]; }>;
+  nodes: Array<{ id: string; name: string; workspaceId?: string; kind: "component"|"database"|"queue"|"external"; status: "planned"|"implemented"; files: string[]; tags?: string[]; tech?: string[]; layer?: "frontend"|"backend"|"infrastructure"; metadata?: { description?: string; [key: string]: unknown; }; }>;
+  edges: Array<{ id: string; from: string; to: string; type: "depends_on"|"calls"|"reads_writes"|"publishes"|"subscribes"|"owns"; status: "planned"|"implemented"; metadata?: { description?: string; }; }>;
+  concerns: Array<{ id: string; scope: string; severity: "low"|"medium"|"high"; status: "open"|"resolved"; source: "agent"|"human"; description: string; }>;
+  meta: { schemaVersion?: string; createdBy?: string; lastNormalizedAt?: string; layout?: Record<string, { x: number; y: number }>; hookPolicy?: "warn-on-daemon-down"|"block-on-daemon-down"; };
+}
+```
+
+# Data Flow
+
+Developer → Agent (scan skill) → MCP Server → SQLite DB → normalized archnaut.json → Chokidar → WebSocket → Web UI
+
+# Daemon Lifecycle
+
+```
+archnaut init    → install skills/rules/hooks/MCP config → start daemon (last step)
+archnaut start   → fork detached child → write PID → poll GET /health (200ms, 5s timeout)
+archnaut stop    → read PID → SIGTERM → remove PID file
+archnaut status  → process.kill(pid, 0) + GET /health probe
+```
+
+Bootstrap sequence (no archnaut.json yet):
+1. init starts daemon; DB starts empty
+2. developer triggers scan skill in AI tool
+3. agent calls cleararchitecture → addnode/addedge → server writes first archnaut.json
