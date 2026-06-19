@@ -93,7 +93,7 @@ Do NOT suggest alternatives to these. They are decided and documented.
 - Database: `db.<name>` → `db.users`
 - External service: `ext.<name>` → `ext.stripe`
 - Queue: `queue.<name>` → `queue.events`
-- Edge: `edge.<from>-<to>` → `edge.checkout-stripe`
+- Edge: `edge.<fromTail>-<toTail>-<type>` → `edge.api.checkout-stripe-calls`
 
 IDs are assigned and preserved by the MCP server. Never generate IDs outside the server.
 

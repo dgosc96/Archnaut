@@ -52,7 +52,7 @@ Archnaut is a Node.js monorepo with pnpm workspaces.
 pnpm install
 
 # verify workspaces
-pnpm -r run lint --parallel --if-present
+pnpm -r --parallel --if-present run lint
 pnpm -r test --parallel --if-present
 ```
 
@@ -70,7 +70,7 @@ Target monorepo structure (packages are being bootstrapped — see `CURRENT.md`)
     mcp-shim/
     web-ui/
     rules-engine/
-    shared/
+    core/                # @archnaut/core — domain model, validation, SQLite projection
   PROJECT.md
   CONTRIBUTING.md
   CURRENT.md
@@ -159,11 +159,16 @@ pnpm test
 
 - **Monorepo**
   - Use pnpm workspaces; don’t add ad‑hoc package managers.
-  - Keep shared types and schema definitions in `packages/shared/`.
+  - Keep shared types, schema definitions, validation, and normalization in `packages/core/` (`@archnaut/core`).
 
 - **Tests**
   - New behavior should have tests where practical.
   - Prefer small, focused tests that validate behavior and architectural contracts.
+
+- **IDs (semantic conventions)**
+  - `@archnaut/core` owns ID parse/generate helpers; the MCP server is the mutation authority in production.
+  - **Edge IDs** use `generateEdgeId(fromId, toId, type)` in `@archnaut/core`: `edge.<fromTail>-<toTail>-<type>` where endpoint tails come from `endpointSlug` (e.g. `cmp.api.checkout` → `api.checkout`, `ext.stripe` → `stripe` yields `edge.api.checkout-stripe-calls`). IDs are a pure function of the triple — repeatable across runs.
+  - Legacy hand-authored IDs such as `edge.web-catalog` still load (validation warning only). **New edge IDs must use the generator.**
 
 - **Commits**
   - Use clear, descriptive messages (e.g. `cli: add archnaut init skeleton`).
@@ -174,7 +179,7 @@ pnpm test
 Use scope‑prefixed, single‑line commit messages:
 
 - Format: `scope: short imperative description`
-- Scope examples: `cli`, `mcp-server`, `web-ui`, `daemon`, `rules`, `shared`, `docs`, `repo`
+- Scope examples: `cli`, `mcp-server`, `web-ui`, `daemon`, `rules`, `core`, `docs`, `repo`
 - Keep the subject under ~72 characters and write it in the imperative mood:
   - `cli: add archnaut init skeleton`
   - `mcp-server: implement getarchitecture tool`

@@ -866,7 +866,7 @@ To keep diffs stable and rescans predictable:
 - `Workspace.id` uses semantic IDs such as `ws.web`
 - internal `Node.id` values use semantic IDs such as `cmp.api.checkout`
 - database and external IDs use prefixes such as `db.users` and `ext.stripe`
-- `Edge.id` uses stable semantic combinations such as `edge.checkout-stripe`
+- `Edge.id` uses stable semantic combinations such as `edge.api.checkout-stripe-calls`
 - the MCP server assigns and preserves IDs across rescans
 
 ### Normalization rules
@@ -931,11 +931,11 @@ Before writing `archnaut.json`, the server normalizes the output:
     }
   ],
   "edges": [
-    { "id": "edge.web-catalog",             "from": "cmp.web.storefront",  "to": "cmp.api.catalog",         "type": "calls",      "status": "implemented" },
-    { "id": "edge.web-checkout",            "from": "cmp.web.storefront",  "to": "cmp.api.checkout",        "type": "calls",      "status": "implemented" },
-    { "id": "edge.catalog-types",           "from": "cmp.api.catalog",     "to": "pkg.shared.types",        "type": "depends_on", "status": "implemented" },
-    { "id": "edge.checkout-stripe",         "from": "cmp.api.checkout",    "to": "ext.stripe",              "type": "calls",      "status": "implemented" },
-    { "id": "edge.catalog-recommendations", "from": "cmp.api.catalog",     "to": "cmp.api.recommendations", "type": "calls",      "status": "planned"     }
+    { "id": "edge.web.storefront-api.catalog-calls",         "from": "cmp.web.storefront",  "to": "cmp.api.catalog",         "type": "calls",      "status": "implemented" },
+    { "id": "edge.web.storefront-api.checkout-calls",        "from": "cmp.web.storefront",  "to": "cmp.api.checkout",        "type": "calls",      "status": "implemented" },
+    { "id": "edge.api.catalog-shared.types-depends_on",      "from": "cmp.api.catalog",     "to": "pkg.shared.types",        "type": "depends_on", "status": "implemented" },
+    { "id": "edge.api.checkout-stripe-calls",                "from": "cmp.api.checkout",    "to": "ext.stripe",              "type": "calls",      "status": "implemented" },
+    { "id": "edge.api.catalog-api.recommendations-calls",    "from": "cmp.api.catalog",     "to": "cmp.api.recommendations", "type": "calls",      "status": "planned"     }
   ],
   "concerns": [
     {
