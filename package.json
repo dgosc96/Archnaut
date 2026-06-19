@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
-    "eslint": "^9.28.0",
+    "eslint": "^9.30.0",
     "typescript-eslint": "^8.33.1"
   },
   "pnpm": {

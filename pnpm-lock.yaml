@@ -12,7 +12,7 @@ importers:
         specifier: ^9.28.0
         version: 9.39.4
       eslint:
-        specifier: ^9.28.0
+        specifier: ^9.30.0
         version: 9.39.4
       typescript-eslint:
         specifier: ^8.33.1

@@ -135,7 +135,7 @@ git checkout -b fix/short-description
 pnpm lint
 pnpm test
 # or, in a single package:
-cd packages/cli
+cd packages/core
 pnpm lint
 pnpm test
 ```
@@ -160,6 +160,12 @@ pnpm test
 - **Monorepo**
   - Use pnpm workspaces; don’t add ad‑hoc package managers.
   - Keep shared types, schema definitions, validation, and normalization in `packages/core/` (`@archnaut/core`).
+
+- **Linting**
+  - ESLint config lives at the repo root only (`eslint.config.mjs`).
+  - Each workspace package opts in via a `"lint": "eslint ."` script; rules are scoped by `basePath` in the root config.
+  - When adding a new package: add a `basePath` entry in `eslint.config.mjs` and a `"lint": "eslint ."` script in the package.
+  - Do not add per-package ESLint config files unless a package needs genuinely different rules (post‑v0.1).
 
 - **Tests**
   - New behavior should have tests where practical.
