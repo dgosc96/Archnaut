@@ -1,14 +1,9 @@
-import type { EdgeType } from "../validation/schemas/enums.schema.js";
+import { edgeTypeSchema, type EdgeType } from "../validation/schemas/enums.schema.js";
 import { EDGE_ID_PATTERN } from "./patterns.js";
 
-const EDGE_TYPES: EdgeType[] = [
-  "reads_writes",
-  "depends_on",
-  "subscribes",
-  "publishes",
-  "calls",
-  "owns",
-];
+const EDGE_TYPES: EdgeType[] = [...edgeTypeSchema.options].sort(
+  (a, b) => b.length - a.length || a.localeCompare(b),
+);
 
 export interface ParsedEdgeId {
   slug: string;

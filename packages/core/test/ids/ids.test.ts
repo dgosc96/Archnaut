@@ -6,6 +6,18 @@ import { generateNodeId } from "../../src/ids/generate-node-id.js";
 import { generateWorkspaceId } from "../../src/ids/generate-workspace-id.js";
 import { parseEdgeId } from "../../src/ids/parse-edge-id.js";
 import { parseNodeId } from "../../src/ids/parse-node-id.js";
+import { edgeTypeSchema } from "../../src/validation/schemas/enums.schema.js";
+
+function matchLongestEdgeTypeSuffix(body: string, types: readonly string[]): string | undefined {
+  const sorted = [...types].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  for (const type of sorted) {
+    const suffix = `-${type}`;
+    if (body.endsWith(suffix)) {
+      return type;
+    }
+  }
+  return undefined;
+}
 
 describe("ID helpers", () => {
   it("parses component and package node ids", () => {
@@ -84,6 +96,23 @@ describe("ID helpers", () => {
       slug: "web-catalog",
       raw: "edge.web-catalog",
     });
+  });
+
+  it("round-trips every edge type through generateEdgeId and parseEdgeId", () => {
+    for (const type of edgeTypeSchema.options) {
+      const id = generateEdgeId("cmp.api.checkout", "ext.stripe", type);
+      expect(parseEdgeId(id)).toEqual({
+        slug: "api.checkout-stripe",
+        type,
+        raw: id,
+      });
+    }
+  });
+
+  it("prefers the longest matching edge type suffix when names overlap", () => {
+    const overlappingTypes = ["calls", "recalls"];
+    expect(matchLongestEdgeTypeSuffix("foo-recalls", overlappingTypes)).toBe("recalls");
+    expect(matchLongestEdgeTypeSuffix("foo-recalls", ["calls", "recalls"])).not.toBe("calls");
   });
 
   it("generates workspace ids", () => {
