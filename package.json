@@ -5,7 +5,8 @@
   "description": "AI-powered architecture management layer for agentic coding.",
   "scripts": {
     "build": "pnpm -r run build",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r --parallel --if-present run lint"
   },
   "repository": {
     "type": "git",
@@ -20,6 +21,11 @@
   "homepage": "https://github.com/dgosc96/Archnaut#readme",
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "eslint": "^9.28.0",
+    "typescript-eslint": "^8.33.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["better-sqlite3"]
