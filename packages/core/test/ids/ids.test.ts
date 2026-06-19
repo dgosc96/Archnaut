@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { endpointSlug } from "../../src/ids/endpoint-slug.js";
 import { generateEdgeId } from "../../src/ids/generate-edge-id.js";
 import { generateNodeId } from "../../src/ids/generate-node-id.js";
 import { generateWorkspaceId } from "../../src/ids/generate-workspace-id.js";
@@ -87,5 +88,31 @@ describe("ID helpers", () => {
 
   it("generates workspace ids", () => {
     expect(generateWorkspaceId("Web App")).toBe("ws.web-app");
+  });
+});
+
+describe("endpointSlug", () => {
+  it("derives structural tails for parseable node ids", () => {
+    expect(endpointSlug("cmp.api.checkout")).toBe("api.checkout");
+    expect(endpointSlug("ext.stripe")).toBe("stripe");
+  });
+
+  it("derives fallback tails by dropping the unknown kind prefix", () => {
+    expect(endpointSlug("legacy.api.checkout")).toBe("api.checkout");
+    expect(endpointSlug("orphan")).toBe("orphan");
+  });
+
+  it("returns stable edge ids for legacy node ids across repeated calls", () => {
+    const first = generateEdgeId("legacy.api.checkout", "ext.stripe", "calls");
+    const second = generateEdgeId("legacy.api.checkout", "ext.stripe", "calls");
+    expect(first).toBe("edge.api.checkout-stripe-calls");
+    expect(first).toBe(second);
+  });
+
+  it("matches cmp edge ids when legacy ids share the same tail shape", () => {
+    const legacy = generateEdgeId("legacy.api.checkout", "ext.stripe", "calls");
+    const cmp = generateEdgeId("cmp.api.checkout", "ext.stripe", "calls");
+    expect(legacy).toBe(cmp);
+    expect(legacy).toBe("edge.api.checkout-stripe-calls");
   });
 });
