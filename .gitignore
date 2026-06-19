@@ -35,3 +35,6 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# Superpowers session docs
+docs/superpowers/

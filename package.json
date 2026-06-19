@@ -1,10 +1,11 @@
 {
   "name": "archnaut",
   "version": "0.0.1",
-  "description": "AI-powered architecture management layer for agentic coding. Coming soon.",
-  "main": "index.js",
+  "private": true,
+  "description": "AI-powered architecture management layer for agentic coding.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test"
   },
   "repository": {
     "type": "git",
@@ -16,5 +17,11 @@
   "bugs": {
     "url": "https://github.com/dgosc96/Archnaut/issues"
   },
-  "homepage": "https://github.com/dgosc96/Archnaut#readme"
+  "homepage": "https://github.com/dgosc96/Archnaut#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  }
 }
