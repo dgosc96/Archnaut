@@ -1,4 +1,5 @@
 import eslint from "@eslint/js";
+import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
 
 const packageLintTargets = [
@@ -13,7 +14,7 @@ const packageLintTargets = [
   // future: { basePath: "packages/cli", files: ["src/**/*.ts", "test/**/*.ts"] },
 ];
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: ["**/dist/**", "**/node_modules/**"],
   },
