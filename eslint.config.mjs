@@ -6,6 +6,10 @@ const packageLintTargets = [
     basePath: "packages/core",
     files: ["src/**/*.ts", "test/**/*.ts"],
   },
+  {
+    basePath: "packages/server",
+    files: ["src/**/*.ts", "test/**/*.ts"],
+  },
   // future: { basePath: "packages/cli", files: ["src/**/*.ts", "test/**/*.ts"] },
 ];
 
