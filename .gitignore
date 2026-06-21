@@ -38,3 +38,7 @@ pnpm-debug.log*
 
 # Superpowers session docs
 docs/superpowers/
+
+# MemPalace per-project files
+mempalace.yaml
+entities.json
