@@ -1,4 +1,5 @@
-import { concernSchema, type Concern } from "./schemas/concern.schema.js";
+import type { Concern } from "../schema/concern.js";
+import { concernSchema } from "./schemas/concern.schema.js";
 import type { ValidationContext } from "./validation-context.js";
 import type { ValidationResult } from "./issues.js";
 import { validationFail, validationOk } from "./issues.js";
@@ -7,6 +8,14 @@ import { checkIdFormat } from "./validation-context.js";
 import { parseNodeId } from "../ids/parse-node-id.js";
 import { parseWorkspaceId } from "../ids/parse-workspace-id.js";
 
+/**
+ * Validate a single concern (schema, ID format, and scope reference when scope looks like an entity id).
+ *
+ * @param value - Raw concern object.
+ * @param ctx - Known workspace, node, and edge IDs from the parent file.
+ * @param index - Zero-based index in the parent `concerns` array (used in issue paths).
+ * @returns On success, `{ ok: true, value: Concern, warnings? }`; `INVALID_ID_FORMAT` is downgraded to warnings.
+ */
 export function validateConcern(
   value: unknown,
   ctx: ValidationContext,

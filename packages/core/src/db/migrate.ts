@@ -70,10 +70,23 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 `;
 
+/**
+ * Ensure the SQLite projection schema exists on an open database connection.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ */
 export function migrateDb(db: Database.Database): void {
   db.exec(DDL);
 }
 
+/**
+ * Delete all rows from every projection table without dropping schema.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ *
+ * @remarks Called at the start of {@link initDbFromFile} so hydration always replaces the
+ * full runtime snapshot rather than merging incrementally.
+ */
 export function clearDb(db: Database.Database): void {
   db.exec(`
     DELETE FROM node_files;

@@ -9,11 +9,14 @@ import {
   loadValidateNormalize,
 } from "@archnaut/core";
 
-/** Runtime access to the SQLite projection and canonical `archnaut.json` path. */
+/**
+ * Runtime access to the SQLite projection and canonical `archnaut.json` path.
+ * Obtained from {@link createStore}; callers pass this into HTTP/MCP handlers.
+ */
 export interface Store {
-  /** Open better-sqlite3 handle for the runtime projection. */
+  /** Open better-sqlite3 handle for the runtime projection under `.archnaut/db.sqlite`. */
   getDb(): Database.Database;
-  /** Absolute path to the project's `archnaut.json`. */
+  /** Absolute path to the project's git-tracked `archnaut.json`. */
   getArchJsonPath(): string;
 }
 
@@ -23,7 +26,12 @@ export interface CreateStoreOptions {
   dbPath?: string;
 }
 
-/** Return whether `archJsonPath` exists on disk. */
+/**
+ * Return whether `archJsonPath` exists on disk.
+ *
+ * @param archJsonPath - Absolute path to `archnaut.json`.
+ * @returns `true` when the file is accessible.
+ */
 async function archJsonExists(archJsonPath: string): Promise<boolean> {
   try {
     await access(archJsonPath);
@@ -35,6 +43,15 @@ async function archJsonExists(archJsonPath: string): Promise<boolean> {
 
 /**
  * Open the runtime store: migrate SQLite and hydrate from `archnaut.json` when present.
+ *
+ * @param archJsonPath - Absolute path to the project's canonical `archnaut.json`.
+ * @param options - Optional overrides for the SQLite database location.
+ * @returns Store handle for DB access and the canonical JSON path.
+ * @throws When SQLite cannot be opened, schema migration fails, or existing `archnaut.json` fails validation.
+ * @remarks
+ * Ensures `.archnaut/` exists under the project root (unless `dbPath` is `':memory:'`) and opens
+ * `db.sqlite` there by default. When `archnaut.json` is on disk, loads, validates, normalizes, and
+ * projects it into SQLite; otherwise clears the runtime DB for bootstrap before the first scan.
  */
 export async function createStore(
   archJsonPath: string,

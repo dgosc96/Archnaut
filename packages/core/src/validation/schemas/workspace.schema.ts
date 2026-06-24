@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import type { Workspace } from "../../schema/workspace.js";
 import { workspaceKindSchema } from "./enums.schema.js";
 
 export const workspaceSchema = z
@@ -9,6 +11,6 @@ export const workspaceSchema = z
     kind: workspaceKindSchema,
     tags: z.array(z.string()).optional(),
   })
-  .strict();
+  .strict() satisfies z.ZodType<Workspace>;
 
-export type Workspace = z.infer<typeof workspaceSchema>;
+export type { Workspace } from "../../schema/workspace.js";

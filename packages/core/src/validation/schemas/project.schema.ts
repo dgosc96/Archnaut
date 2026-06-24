@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import type { Project } from "../../schema/project.js";
 import { packageManagerSchema } from "./enums.schema.js";
 
 export const projectSchema = z
@@ -9,6 +11,6 @@ export const projectSchema = z
     packageManager: packageManagerSchema.optional(),
     monorepo: z.boolean(),
   })
-  .strict();
+  .strict() satisfies z.ZodType<Project>;
 
-export type Project = z.infer<typeof projectSchema>;
+export type { Project } from "../../schema/project.js";

@@ -1,10 +1,19 @@
-import { nodeSchema, type Node } from "./schemas/node.schema.js";
+import type { Node } from "../schema/node.js";
+import { nodeSchema } from "./schemas/node.schema.js";
 import type { ValidationContext } from "./validation-context.js";
 import type { ValidationResult } from "./issues.js";
 import { validationFail, validationOk } from "./issues.js";
 import { zodIssuesToValidationIssues } from "./zod-mapper.js";
 import { checkIdFormat } from "./validation-context.js";
 
+/**
+ * Validate a single node (schema, ID format, and workspace reference constraints).
+ *
+ * @param value - Raw node object.
+ * @param ctx - Known workspace and node IDs from the parent file.
+ * @param index - Zero-based index in the parent `nodes` array (used in issue paths).
+ * @returns On success, `{ ok: true, value: Node, warnings? }`; `INVALID_ID_FORMAT` is downgraded to warnings.
+ */
 export function validateNode(
   value: unknown,
   ctx: ValidationContext,

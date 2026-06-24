@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-import type { ArchnautFileV1 } from "../validation/schemas/archnaut-file.schema.js";
+import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
 import { clearDb } from "./migrate.js";
 import {
   concernToRow,
@@ -11,6 +11,16 @@ import {
   workspaceToRow,
 } from "./map.js";
 
+/**
+ * Hydrate the SQLite projection from a normalized `archnaut.json` document.
+ *
+ * @param file - Normalized architecture file to project into relational tables.
+ * @param db - Open better-sqlite3 database handle (schema should already exist).
+ *
+ * @remarks Runs inside a single transaction: {@link clearDb} wipes all tables, then project,
+ * workspaces, nodes (with files/tags/tech), edges, concerns, and meta rows are inserted.
+ * The DB is a runtime mirror of the file — not an incremental merge.
+ */
 export function initDbFromFile(file: ArchnautFileV1, db: Database.Database): void {
   const run = db.transaction(() => {
     clearDb(db);

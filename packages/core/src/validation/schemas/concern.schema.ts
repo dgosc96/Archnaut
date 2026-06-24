@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import type { Concern } from "../../schema/concern.js";
 import {
   concernSeveritySchema,
   concernSourceSchema,
@@ -14,6 +16,6 @@ export const concernSchema = z
     source: concernSourceSchema,
     description: z.string().min(1),
   })
-  .strict();
+  .strict() satisfies z.ZodType<Concern>;
 
-export type Concern = z.infer<typeof concernSchema>;
+export type { Concern } from "../../schema/concern.js";

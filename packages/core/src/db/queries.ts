@@ -1,17 +1,24 @@
 import type Database from "better-sqlite3";
 
-import {
-  ARCHNAUT_FILE_VERSION,
-  type ArchnautFileV1,
-} from "../validation/schemas/archnaut-file.schema.js";
-import type { Concern } from "../validation/schemas/concern.schema.js";
-import type { Edge } from "../validation/schemas/edge.schema.js";
-import type { Meta } from "../validation/schemas/meta.schema.js";
-import type { Node } from "../validation/schemas/node.schema.js";
-import type { Project } from "../validation/schemas/project.schema.js";
-import type { Workspace } from "../validation/schemas/workspace.schema.js";
+import { ARCHNAUT_FILE_VERSION, type ArchnautFileV1 } from "../schema/archnaut-file.js";
+import type { Concern } from "../schema/concern.js";
+import type { Edge } from "../schema/edge.js";
+import type { Meta } from "../schema/meta.js";
+import type { Node } from "../schema/node.js";
+import type { Project } from "../schema/project.js";
+import type { Workspace } from "../schema/workspace.js";
 
-/** @internal Round-trip helper for tests and dogfooding. */
+/**
+ * Reconstruct an `ArchnautFileV1` document from the SQLite projection.
+ *
+ * @param db - Open better-sqlite3 database handle with hydrated projection tables.
+ * @returns Round-tripped architecture file assembled from relational rows.
+ *
+ * @remarks Intended for tests and dogfooding — not the production read path, which reads
+ * `archnaut.json` directly. Ordering matches normalized file conventions (sorted by id).
+ *
+ * @throws When the database has no project row (empty or uninitialized projection).
+ */
 export function getArchitectureSnapshot(db: Database.Database): ArchnautFileV1 {
   const projectRow = db
     .prepare(`SELECT id, name, root, package_manager, monorepo FROM project LIMIT 1`)

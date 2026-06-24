@@ -1,7 +1,5 @@
-import {
-  archnautFileSchema,
-  type ArchnautFileV1,
-} from "./schemas/archnaut-file.schema.js";
+import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
+import { archnautFileSchema } from "./schemas/archnaut-file.schema.js";
 import type { ValidationIssue } from "./issues.js";
 import {
   partitionIssues,
@@ -20,6 +18,13 @@ import { validateMeta } from "./validate-meta.js";
 import { validateNode } from "./validate-node.js";
 import { validateWorkspace } from "./validate-workspace.js";
 
+/**
+ * Validate a full `archnaut.json` document (structural Zod parse plus semantic cross-field checks).
+ * Collects all issues before returning; duplicate IDs, missing references, and constraint violations are errors.
+ *
+ * @param value - Raw parsed JSON or unknown input.
+ * @returns On success, `{ ok: true, value: ArchnautFileV1, warnings? }`; on failure, `{ ok: false, issues }`.
+ */
 export function validateArchnautFile(value: unknown): import("./issues.js").ValidationResult<ArchnautFileV1> {
   if (value !== null && typeof value === "object" && "version" in value) {
     const version = (value as { version: unknown }).version;

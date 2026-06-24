@@ -1,4 +1,6 @@
 import { z } from "zod";
+
+import type { LayoutEntry, Meta } from "../../schema/meta.js";
 import { hookPolicySchema } from "./enums.schema.js";
 
 export const layoutEntrySchema = z
@@ -6,7 +8,7 @@ export const layoutEntrySchema = z
     x: z.number(),
     y: z.number(),
   })
-  .strict();
+  .strict() satisfies z.ZodType<LayoutEntry>;
 
 export const metaSchema = z
   .object({
@@ -16,7 +18,6 @@ export const metaSchema = z
     layout: z.record(z.string(), layoutEntrySchema).optional(),
     hookPolicy: hookPolicySchema.optional(),
   })
-  .strict();
+  .strict() satisfies z.ZodType<Meta>;
 
-export type LayoutEntry = z.infer<typeof layoutEntrySchema>;
-export type Meta = z.infer<typeof metaSchema>;
+export type { LayoutEntry, Meta } from "../../schema/meta.js";

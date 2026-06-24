@@ -1,4 +1,4 @@
-import type { ArchnautFileV1 } from "../../src/validation/schemas/archnaut-file.schema.js";
+import type { ArchnautFileV1 } from "../../src/schema/archnaut-file.js";
 
 export const shopPlatformFixture: ArchnautFileV1 = {
   version: 1,
