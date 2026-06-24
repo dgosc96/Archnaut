@@ -2,6 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import type Database from "better-sqlite3";
+
 import { getArchitectureSnapshot, saveArchnautFile } from "@archnaut/core";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -18,6 +20,20 @@ async function makeTempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "archnaut-store-"));
   tempDirs.push(dir);
   return dir;
+}
+
+const EMPTY_GRAPH_TABLES = ["nodes", "edges", "workspaces", "concerns"] as const;
+type GraphTable = (typeof EMPTY_GRAPH_TABLES)[number];
+
+const COUNT_SQL: Record<GraphTable, string> = {
+  nodes: "SELECT COUNT(*) AS c FROM nodes",
+  edges: "SELECT COUNT(*) AS c FROM edges",
+  workspaces: "SELECT COUNT(*) AS c FROM workspaces",
+  concerns: "SELECT COUNT(*) AS c FROM concerns",
+};
+
+function tableCount(db: Database.Database, table: GraphTable): number {
+  return (db.prepare(COUNT_SQL[table]).get() as { c: number }).c;
 }
 
 describe("createStore", () => {
@@ -42,13 +58,11 @@ describe("createStore", () => {
     const store = await createStore(jsonPath, { dbPath: ":memory:" });
 
     expect(store.getArchJsonPath()).toBe(jsonPath);
-    const nodeCount = store
-      .getDb()
-      .prepare("SELECT COUNT(*) AS c FROM nodes")
-      .get() as { c: number };
-    expect(nodeCount.c).toBe(0);
-    expect(store.getDb().prepare("SELECT id FROM project LIMIT 1").get()).toBeUndefined();
+    const db = store.getDb();
+    for (const table of EMPTY_GRAPH_TABLES) {
+      expect(tableCount(db, table)).toBe(0);
+    }
 
-    store.getDb().close();
+    db.close();
   });
 });
