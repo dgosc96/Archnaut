@@ -7,7 +7,7 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r --parallel --if-present run lint",
-    "lint:docs": "eslint packages/core/src packages/server/src"
+    "lint:docs": "eslint --max-warnings=0 packages/core/src packages/server/src"
   },
   "repository": {
     "type": "git",
