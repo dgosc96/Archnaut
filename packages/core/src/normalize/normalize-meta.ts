@@ -1,5 +1,5 @@
 import type { LayoutEntry, Meta } from "../schema/meta.js";
-import { dedupeSorted } from "./sort.js";
+import { compareStrings, dedupeSorted } from "./sort.js";
 
 /**
  * Normalize `meta`: stamp `lastNormalizedAt`, prune orphan layout keys, default `schemaVersion`.
@@ -27,7 +27,7 @@ export function normalizeMeta(
 
   if (meta.layout && Object.keys(meta.layout).length > 0) {
     const layout: Record<string, LayoutEntry> = {};
-    const keys = Object.keys(meta.layout).sort((a, b) => a.localeCompare(b));
+    const keys = Object.keys(meta.layout).sort(compareStrings);
     for (const key of keys) {
       if (validNodeIds.has(key)) {
         layout[key] = meta.layout[key]!;
