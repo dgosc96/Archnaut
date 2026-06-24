@@ -52,22 +52,45 @@ async function closeServer(srv: Server): Promise<void> {
 /** Send a raw HTTP/1.1 GET with an arbitrary request-target (for malformed URL cases). */
 async function rawGet(port: number, requestTarget: string): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const client = net.connect(port, "127.0.0.1", () => {
       client.write(
         `GET ${requestTarget} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`,
       );
     });
     let data = "";
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      client.destroy();
+      reject(new Error(`rawGet timed out for request-target: ${requestTarget}`));
+    }, 5_000);
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      fn();
+    };
+
     client.on("data", (chunk) => {
       data += chunk.toString();
     });
     client.on("close", () => {
-      const [head, ...rest] = data.split("\r\n\r\n");
-      const statusLine = head.split("\r\n")[0] ?? "";
-      const statusCode = Number(statusLine.split(" ")[1]);
-      resolve({ statusCode, body: rest.join("\r\n\r\n") });
+      settle(() => {
+        const [head, ...rest] = data.split("\r\n\r\n");
+        const statusLine = head.split("\r\n")[0] ?? "";
+        const statusCode = Number(statusLine.split(" ")[1]);
+        if (!Number.isInteger(statusCode)) {
+          reject(new Error(`rawGet received invalid HTTP response: "${statusLine}"`));
+          return;
+        }
+        resolve({ statusCode, body: rest.join("\r\n\r\n") });
+      });
     });
-    client.on("error", reject);
+    client.on("error", (err) => {
+      settle(() => reject(err));
+    });
   });
 }
 
