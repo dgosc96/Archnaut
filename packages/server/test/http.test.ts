@@ -1,5 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import type { Server } from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -48,6 +49,28 @@ async function closeServer(srv: Server): Promise<void> {
   );
 }
 
+/** Send a raw HTTP/1.1 GET with an arbitrary request-target (for malformed URL cases). */
+async function rawGet(port: number, requestTarget: string): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const client = net.connect(port, "127.0.0.1", () => {
+      client.write(
+        `GET ${requestTarget} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    let data = "";
+    client.on("data", (chunk) => {
+      data += chunk.toString();
+    });
+    client.on("close", () => {
+      const [head, ...rest] = data.split("\r\n\r\n");
+      const statusLine = head.split("\r\n")[0] ?? "";
+      const statusCode = Number(statusLine.split(" ")[1]);
+      resolve({ statusCode, body: rest.join("\r\n\r\n") });
+    });
+    client.on("error", reject);
+  });
+}
+
 describe("http server", () => {
   it("startServer resolves when listening", async () => {
     store = await makeStore();
@@ -78,6 +101,16 @@ describe("http server", () => {
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+
+  it("returns 404 for malformed request-target without crashing", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode, body } = await rawGet(port, "http://[::1");
+    expect(statusCode).toBe(404);
+    expect(JSON.parse(body)).toEqual({ error: "Not Found" });
   });
 
   it("createHttpServer listens without startServer", async () => {

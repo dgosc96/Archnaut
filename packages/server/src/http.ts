@@ -18,9 +18,16 @@ export interface NotFoundResponse {
   error: "Not Found";
 }
 
+/** Fallback pathname when `url` cannot be parsed; routes to 404. */
+const UNPARSEABLE_PATH = "";
+
 /** Extract the pathname from a request URL, ignoring query strings. */
 function parsePathname(url: string | undefined): string {
-  return new URL(url ?? "/", "http://127.0.0.1").pathname;
+  try {
+    return new URL(url ?? "/", "http://127.0.0.1").pathname;
+  } catch {
+    return UNPARSEABLE_PATH;
+  }
 }
 
 /** Write a JSON response with the given HTTP status. */
