@@ -11,7 +11,7 @@ const nodeMetadataObjectSchema = z
 
 export const nodeMetadataSchema = nodeMetadataObjectSchema.optional();
 
-export const nodeSchema: z.ZodType<Node> = z
+export const nodeSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
@@ -24,6 +24,6 @@ export const nodeSchema: z.ZodType<Node> = z
     layer: nodeLayerSchema.optional(),
     metadata: nodeMetadataSchema,
   })
-  .strict();
+  .strict() satisfies z.ZodType<Node>;
 
 export type { Node, NodeMetadata } from "../../schema/node.js";

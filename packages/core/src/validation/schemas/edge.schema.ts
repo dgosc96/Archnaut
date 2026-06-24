@@ -11,7 +11,7 @@ const edgeMetadataObjectSchema = z
 
 export const edgeMetadataSchema = edgeMetadataObjectSchema.optional();
 
-export const edgeSchema: z.ZodType<Edge> = z
+export const edgeSchema = z
   .object({
     id: z.string().min(1),
     from: z.string().min(1),
@@ -20,6 +20,6 @@ export const edgeSchema: z.ZodType<Edge> = z
     status: edgeStatusSchema,
     metadata: edgeMetadataSchema,
   })
-  .strict();
+  .strict() satisfies z.ZodType<Edge>;
 
 export type { Edge, EdgeMetadata } from "../../schema/edge.js";

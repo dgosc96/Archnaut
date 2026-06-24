@@ -13,7 +13,7 @@ import { workspaceSchema } from "./workspace.schema.js";
 
 export { ARCHNAUT_FILE_VERSION } from "../../schema/archnaut-file.js";
 
-export const archnautFileSchema: z.ZodType<ArchnautFileV1> = z
+export const archnautFileSchema = z
   .object({
     version: z.literal(ARCHNAUT_FILE_VERSION),
     project: projectSchema,
@@ -23,6 +23,6 @@ export const archnautFileSchema: z.ZodType<ArchnautFileV1> = z
     concerns: z.array(concernSchema),
     meta: metaSchema,
   })
-  .strict();
+  .strict() satisfies z.ZodType<ArchnautFileV1>;
 
 export type { ArchnautFileV1 } from "../../schema/archnaut-file.js";

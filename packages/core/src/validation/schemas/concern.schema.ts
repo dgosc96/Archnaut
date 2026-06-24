@@ -7,7 +7,7 @@ import {
   concernStatusSchema,
 } from "./enums.schema.js";
 
-export const concernSchema: z.ZodType<Concern> = z
+export const concernSchema = z
   .object({
     id: z.string().min(1),
     scope: z.string().min(1),
@@ -16,6 +16,6 @@ export const concernSchema: z.ZodType<Concern> = z
     source: concernSourceSchema,
     description: z.string().min(1),
   })
-  .strict();
+  .strict() satisfies z.ZodType<Concern>;
 
 export type { Concern } from "../../schema/concern.js";
