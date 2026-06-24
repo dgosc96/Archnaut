@@ -1,11 +1,13 @@
 import { z } from "zod";
+
+import type { Concern } from "../../schema/concern.js";
 import {
   concernSeveritySchema,
   concernSourceSchema,
   concernStatusSchema,
 } from "./enums.schema.js";
 
-export const concernSchema = z
+export const concernSchema: z.ZodType<Concern> = z
   .object({
     id: z.string().min(1),
     scope: z.string().min(1),
@@ -16,4 +18,4 @@ export const concernSchema = z
   })
   .strict();
 
-export type Concern = z.infer<typeof concernSchema>;
+export type { Concern } from "../../schema/concern.js";

@@ -1,10 +1,16 @@
-import type { Node } from "../validation/schemas/node.schema.js";
+import type { Node } from "../schema/node.js";
 import { dedupeSorted } from "./sort.js";
 
 function isEmptyRecord(value: Record<string, unknown> | undefined): boolean {
   return !value || Object.keys(value).length === 0;
 }
 
+/**
+ * Normalize a single node — dedupe `files`/`tags`/`tech`, drop empty `metadata`.
+ *
+ * @param node - Node to normalize.
+ * @returns Normalized node suitable for persistence.
+ */
 export function normalizeNode(node: Node): Node {
   const normalized: Node = {
     id: node.id,

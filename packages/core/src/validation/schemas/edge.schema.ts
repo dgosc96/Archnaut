@@ -1,14 +1,17 @@
 import { z } from "zod";
+
+import type { Edge, EdgeMetadata } from "../../schema/edge.js";
 import { edgeStatusSchema, edgeTypeSchema } from "./enums.schema.js";
 
-export const edgeMetadataSchema = z
+const edgeMetadataObjectSchema = z
   .object({
     description: z.string().optional(),
   })
-  .catchall(z.unknown())
-  .optional();
+  .catchall(z.unknown()) satisfies z.ZodType<EdgeMetadata>;
 
-export const edgeSchema = z
+export const edgeMetadataSchema = edgeMetadataObjectSchema.optional();
+
+export const edgeSchema: z.ZodType<Edge> = z
   .object({
     id: z.string().min(1),
     from: z.string().min(1),
@@ -19,5 +22,4 @@ export const edgeSchema = z
   })
   .strict();
 
-export type EdgeMetadata = NonNullable<z.infer<typeof edgeMetadataSchema>>;
-export type Edge = z.infer<typeof edgeSchema>;
+export type { Edge, EdgeMetadata } from "../../schema/edge.js";

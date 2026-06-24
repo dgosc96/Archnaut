@@ -1,7 +1,13 @@
-import type { Meta } from "../validation/schemas/meta.schema.js";
-import type { LayoutEntry } from "../validation/schemas/meta.schema.js";
+import type { LayoutEntry, Meta } from "../schema/meta.js";
 import { dedupeSorted } from "./sort.js";
 
+/**
+ * Normalize `meta`: stamp `lastNormalizedAt`, prune orphan layout keys, default `schemaVersion`.
+ *
+ * @param meta - Raw meta block from the architecture file.
+ * @param validNodeIds - Node ids present after normalization (for layout pruning).
+ * @returns Normalized meta with updated timestamps.
+ */
 export function normalizeMeta(
   meta: Meta,
   validNodeIds: Set<string>,
@@ -35,6 +41,12 @@ export function normalizeMeta(
   return normalized;
 }
 
+/**
+ * Dedupe and sort workspace tags; returns `undefined` when empty.
+ *
+ * @param tags - Optional tag list from a workspace.
+ * @returns Sorted unique tags, or `undefined` when absent/empty.
+ */
 export function normalizeWorkspaceTags(tags: string[] | undefined): string[] | undefined {
   if (!tags || tags.length === 0) {
     return undefined;

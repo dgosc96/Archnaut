@@ -1,9 +1,17 @@
-import { metaSchema, type Meta } from "./schemas/meta.schema.js";
+import type { Meta } from "../schema/meta.js";
+import { metaSchema } from "./schemas/meta.schema.js";
 import type { ValidationContext } from "./validation-context.js";
 import type { ValidationResult } from "./issues.js";
 import { validationFail, validationOk } from "./issues.js";
 import { zodIssuesToValidationIssues } from "./zod-mapper.js";
 
+/**
+ * Validate meta block (schema plus layout node references).
+ *
+ * @param value - Raw meta object.
+ * @param ctx - Known node IDs used to detect orphan layout entries.
+ * @returns On success, `{ ok: true, value: Meta, warnings? }`; unknown layout keys produce `ORPHAN_LAYOUT` warnings.
+ */
 export function validateMeta(
   value: unknown,
   ctx: ValidationContext,

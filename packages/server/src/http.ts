@@ -21,7 +21,12 @@ export interface NotFoundResponse {
 /** Fallback pathname when `url` cannot be parsed; routes to 404. */
 const UNPARSEABLE_PATH = "";
 
-/** Extract the pathname from a request URL, ignoring query strings. */
+/**
+ * Extract the pathname from a request URL, ignoring query strings.
+ *
+ * @param url - Raw request URL from `IncomingMessage`.
+ * @returns Pathname, or empty string when parsing fails (routes to 404).
+ */
 function parsePathname(url: string | undefined): string {
   try {
     return new URL(url ?? "/", "http://127.0.0.1").pathname;
@@ -30,7 +35,13 @@ function parsePathname(url: string | undefined): string {
   }
 }
 
-/** Write a JSON response with the given HTTP status. */
+/**
+ * Write a JSON response with the given HTTP status.
+ *
+ * @param res - Node HTTP response to write to.
+ * @param status - HTTP status code.
+ * @param body - JSON-serializable response body.
+ */
 function sendJson(
   res: ServerResponse,
   status: number,
@@ -41,7 +52,13 @@ function sendJson(
   res.end(JSON.stringify(body));
 }
 
-/** Route incoming HTTP requests to handlers or return 404. */
+/**
+ * Route incoming HTTP requests to handlers or return 404.
+ *
+ * @param _store - Runtime store (reserved for future MCP/architecture routes).
+ * @param req - Incoming HTTP request.
+ * @param res - HTTP response to complete.
+ */
 function handleRequest(
   _store: Store,
   req: IncomingMessage,
@@ -61,6 +78,9 @@ function handleRequest(
 /**
  * Create an HTTP server wired to Archnaut routing.
  * Does not call `listen`; the caller owns server lifecycle.
+ *
+ * @param store - Runtime store passed into request handlers.
+ * @returns Node HTTP server instance (not yet listening).
  */
 export function createHttpServer(store: Store): Server {
   return createServer((req, res) => handleRequest(store, req, res));
@@ -69,6 +89,11 @@ export function createHttpServer(store: Store): Server {
 /**
  * Start the HTTP server on `port`.
  * Resolves when the server is listening; rejects on bind errors.
+ *
+ * @param store - Runtime store wired into request handling.
+ * @param port - TCP port to bind (Archnaut default deployment uses 7070).
+ * @returns Promise that resolves to the listening server.
+ * @throws When the port is already in use (`EADDRINUSE`) or the OS denies the bind.
  */
 export function startServer(store: Store, port: number): Promise<Server> {
   const server = createHttpServer(store);

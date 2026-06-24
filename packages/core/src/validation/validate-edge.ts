@@ -1,10 +1,20 @@
-import { edgeSchema, type Edge } from "./schemas/edge.schema.js";
+import type { Edge } from "../schema/edge.js";
+import { edgeSchema } from "./schemas/edge.schema.js";
 import type { ValidationContext } from "./validation-context.js";
 import type { ValidationResult } from "./issues.js";
 import { validationFail, validationOk } from "./issues.js";
 import { zodIssuesToValidationIssues } from "./zod-mapper.js";
 import { checkIdFormat } from "./validation-context.js";
 
+/**
+ * Validate a single edge (schema, ID format, endpoint references, and duplicate triple checks).
+ *
+ * @param value - Raw edge object.
+ * @param ctx - Known node IDs from the parent file.
+ * @param index - Zero-based index in the parent `edges` array (used in issue paths).
+ * @param allEdges - Full edge list for duplicate `(from, to, type)` detection.
+ * @returns On success, `{ ok: true, value: Edge, warnings? }`; `INVALID_ID_FORMAT` is downgraded to warnings.
+ */
 export function validateEdge(
   value: unknown,
   ctx: ValidationContext,

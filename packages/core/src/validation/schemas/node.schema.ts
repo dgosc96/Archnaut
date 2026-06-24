@@ -1,14 +1,17 @@
 import { z } from "zod";
+
+import type { Node, NodeMetadata } from "../../schema/node.js";
 import { nodeKindSchema, nodeLayerSchema, nodeStatusSchema } from "./enums.schema.js";
 
-export const nodeMetadataSchema = z
+const nodeMetadataObjectSchema = z
   .object({
     description: z.string().optional(),
   })
-  .catchall(z.unknown())
-  .optional();
+  .catchall(z.unknown()) satisfies z.ZodType<NodeMetadata>;
 
-export const nodeSchema = z
+export const nodeMetadataSchema = nodeMetadataObjectSchema.optional();
+
+export const nodeSchema: z.ZodType<Node> = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
@@ -23,5 +26,4 @@ export const nodeSchema = z
   })
   .strict();
 
-export type NodeMetadata = NonNullable<z.infer<typeof nodeMetadataSchema>>;
-export type Node = z.infer<typeof nodeSchema>;
+export type { Node, NodeMetadata } from "../../schema/node.js";

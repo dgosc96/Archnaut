@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { ArchnautFileV1 } from "../validation/schemas/archnaut-file.schema.js";
+import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
 import { validateArchnautFile } from "../validation/validate-archnaut-file.js";
 import { normalizeArchnautFile } from "../normalize/normalize-archnaut-file.js";
 import {
@@ -9,11 +9,25 @@ import {
   ArchnautValidationError,
 } from "./errors.js";
 
+/** Options for {@link loadArchnautFile}. */
 export interface LoadArchnautFileOptions {
+  /** When `true` (default), run full validation and throw on failure. */
   validate?: boolean;
+  /** When `true`, return a normalized copy after successful validation. Default `false`. */
   normalize?: boolean;
 }
 
+/**
+ * Read and optionally validate `archnaut.json` from disk.
+ *
+ * @param path - Path to the canonical `archnaut.json` file.
+ * @param options - Validation and normalization flags.
+ * @returns Parsed architecture document; normalized when `options.normalize` is `true`.
+ * @throws When the file does not exist (`ArchnautFileNotFoundError`, `ENOENT`).
+ * @throws When the file contents are not valid JSON (`ArchnautParseError`).
+ * @throws When validation is enabled and the document fails checks (`ArchnautValidationError`).
+ * @throws When the underlying filesystem read fails for reasons other than a missing file.
+ */
 export async function loadArchnautFile(
   path: string,
   options: LoadArchnautFileOptions = {},

@@ -133,6 +133,7 @@ git checkout -b fix/short-description
 
 ```sh
 pnpm lint
+pnpm lint:docs
 pnpm test
 # or, in a single package:
 cd packages/core
@@ -166,6 +167,68 @@ pnpm test
   - Each workspace package opts in via a `"lint": "eslint ."` script; rules are scoped by `basePath` in the root config.
   - When adding a new package: add a `basePath` entry in `eslint.config.mjs` and a `"lint": "eslint ."` script in the package.
   - Do not add per-package ESLint config files unless a package needs genuinely different rules (post‑v0.1).
+
+## Docstrings
+
+Archnaut uses **JSDoc** for inline documentation. All public-facing and non-trivial
+internal code must be documented.
+
+### When to add a docstring
+
+Add a JSDoc comment (`/** ... */`) to:
+- All exported functions, classes, and interfaces
+- MCP tool handler functions (read and write tools)
+- CLI command handlers
+- Non-obvious internal helpers (e.g. daemon lifecycle, sync logic, normalization)
+- Every property of the `archnaut.json` schema interfaces in `packages/core/src/schema/` (documented interfaces) and `packages/core/src/validation/schemas/` (Zod runtime schemas)
+
+Skip docstrings on:
+- Simple React presentational components whose props are self-explanatory
+- Private one-liner utilities whose names fully describe their behavior
+
+### Format
+
+This is a TypeScript project. **Do not repeat type information** in `@param` or
+`@returns` — TypeScript already carries types. Describe intent and constraints instead.
+
+Required tags by context:
+
+| Tag          | When required                                             |
+|--------------|-----------------------------------------------------------|
+| `@param`     | Every parameter; describe purpose/constraints, not type  |
+| `@returns`   | Any function that returns a meaningful value              |
+| `@throws`    | Any function that can throw; include error type          |
+| `@example`   | All MCP tool handlers and CLI commands                   |
+| `@remarks`   | Non-obvious side effects or behavioral warnings          |
+| `@deprecated`| Anything being phased out; include migration note        |
+
+Example:
+
+```ts
+/**
+ * Registers a new component node in the runtime database and persists
+ * the change to archnaut.json via the normalization pipeline.
+ *
+ * Skips creation if a node with the same semantic ID already exists —
+ * use `setNodeMetadata` to update an existing node.
+ *
+ * @param node - The validated node payload from the MCP tool call.
+ * @returns The assigned node ID as stored in the runtime DB.
+ * @throws ArchnautValidationError If `node.id` conflicts with a reserved prefix.
+ *
+ * @example
+ * await addNode({ id: 'cmp.api.checkout', kind: 'component', status: 'planned', files: [] });
+ */
+export async function addNode(node: NodeInput): Promise<string> { ... }
+```
+
+### Linting
+
+Docstring coverage is enforced by `eslint-plugin-jsdoc` (recommended-typescript preset).
+Run `pnpm lint:docs` to check for missing or malformed docstrings before opening a PR.
+The CI pipeline runs this check automatically.
+
+---
 
 - **Tests**
   - New behavior should have tests where practical.

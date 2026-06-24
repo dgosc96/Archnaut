@@ -18,6 +18,12 @@ function formatPath(path: (string | number)[]): string {
   return "/" + path.map(String).join("/");
 }
 
+/**
+ * Map a Zod parse failure into Archnaut {@link ValidationIssue} records with JSON pointers.
+ *
+ * @param error - Zod validation error from schema parsing.
+ * @returns Issues with Archnaut codes and JSON-pointer paths.
+ */
 export function zodIssuesToValidationIssues(error: ZodError): ValidationIssue[] {
   return error.issues.map((issue) => ({
     code: zodIssueCode(issue),
