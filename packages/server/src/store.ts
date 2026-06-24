@@ -9,16 +9,21 @@ import {
   loadValidateNormalize,
 } from "@archnaut/core";
 
+/** Runtime access to the SQLite projection and canonical `archnaut.json` path. */
 export interface Store {
+  /** Open better-sqlite3 handle for the runtime projection. */
   getDb(): Database.Database;
+  /** Absolute path to the project's `archnaut.json`. */
   getArchJsonPath(): string;
 }
 
+/** Options for {@link createStore}. */
 export interface CreateStoreOptions {
   /** Default: `<projectRoot>/.archnaut/db.sqlite`. Tests should pass `':memory:'`. */
   dbPath?: string;
 }
 
+/** Return whether `archJsonPath` exists on disk. */
 async function archJsonExists(archJsonPath: string): Promise<boolean> {
   try {
     await access(archJsonPath);
@@ -28,6 +33,9 @@ async function archJsonExists(archJsonPath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Open the runtime store: migrate SQLite and hydrate from `archnaut.json` when present.
+ */
 export async function createStore(
   archJsonPath: string,
   options?: CreateStoreOptions,

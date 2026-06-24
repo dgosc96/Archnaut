@@ -7,19 +7,23 @@ import {
 
 import type { Store } from "./store.js";
 
+/** JSON body returned by `GET /health`. */
 export interface HealthResponse {
   ok: true;
   uptime: number;
 }
 
+/** JSON body returned for unknown routes. */
 export interface NotFoundResponse {
   error: "Not Found";
 }
 
+/** Extract the pathname from a request URL, ignoring query strings. */
 function parsePathname(url: string | undefined): string {
   return new URL(url ?? "/", "http://127.0.0.1").pathname;
 }
 
+/** Write a JSON response with the given HTTP status. */
 function sendJson(
   res: ServerResponse,
   status: number,
@@ -30,6 +34,7 @@ function sendJson(
   res.end(JSON.stringify(body));
 }
 
+/** Route incoming HTTP requests to handlers or return 404. */
 function handleRequest(
   _store: Store,
   req: IncomingMessage,
@@ -46,10 +51,18 @@ function handleRequest(
   sendJson(res, 404, { error: "Not Found" });
 }
 
+/**
+ * Create an HTTP server wired to Archnaut routing.
+ * Does not call `listen`; the caller owns server lifecycle.
+ */
 export function createHttpServer(store: Store): Server {
   return createServer((req, res) => handleRequest(store, req, res));
 }
 
+/**
+ * Start the HTTP server on `port`.
+ * Resolves when the server is listening; rejects on bind errors.
+ */
 export function startServer(store: Store, port: number): Promise<Server> {
   const server = createHttpServer(store);
   return new Promise((resolve, reject) => {
