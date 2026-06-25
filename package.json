@@ -5,7 +5,7 @@
   "description": "AI-powered architecture management layer for agentic coding.",
   "scripts": {
     "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
+    "test": "pnpm --filter @archnaut/core build && pnpm -r run test",
     "lint": "pnpm -r --parallel --if-present run lint",
     "lint:docs": "eslint --max-warnings=0 packages/core/src packages/server/src"
   },
