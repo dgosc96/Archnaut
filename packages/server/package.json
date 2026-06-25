@@ -11,7 +11,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
@@ -20,7 +22,9 @@
   },
   "dependencies": {
     "@archnaut/core": "workspace:*",
-    "better-sqlite3": "^11.10.0"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "better-sqlite3": "^11.10.0",
+    "zod": "^3.24.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
