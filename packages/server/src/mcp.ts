@@ -191,6 +191,13 @@ export function createMcpTransport(): StreamableHTTPServerTransport {
   });
 }
 
+function errorFields(err: unknown): { name: string; message: string; stack?: string } {
+  if (err instanceof Error) {
+    return { name: err.name, message: err.message, stack: err.stack };
+  }
+  return { name: "UnknownError", message: String(err) };
+}
+
 /**
  * Handle one MCP HTTP request with an isolated server and transport.
  *
@@ -227,6 +234,13 @@ export async function handleMcpRequest(
         res.end(JSON.stringify({ error: "Bad Request" }));
         return;
       }
+      // TODO: route through the package's structured logger
+      console.error(
+        JSON.stringify({
+          msg: "MCP request handling failed",
+          err: errorFields(error),
+        }),
+      );
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.end(JSON.stringify({ error: "Internal Server Error" }));
