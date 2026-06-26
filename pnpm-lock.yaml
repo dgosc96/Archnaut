@@ -49,7 +49,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@modelcontextprotocol/sdk':
-        specifier: ^1.12.1
+        specifier: ^1.26.0
         version: 1.29.0(zod@3.25.76)
       better-sqlite3:
         specifier: ^11.10.0
