@@ -45,14 +45,35 @@ function jsonResult(data: unknown) {
   };
 }
 
+/** Maximum MCP request body size (1 MiB). */
+const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+
+class RequestBodyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RequestBodyError";
+  }
+}
+
 async function readRequestBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of req) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    size += buf.length;
+    if (size > MAX_REQUEST_BODY_BYTES) {
+      req.resume();
+      throw new RequestBodyError("Request body too large");
+    }
+    chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw) return undefined;
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new RequestBodyError("Malformed JSON body");
+  }
 }
 
 /**
@@ -198,8 +219,14 @@ export async function handleMcpRequest(
     const body = await readRequestBody(req);
     await mcpServer.connect(transport);
     await transport.handleRequest(req, res, body);
-  } catch {
+  } catch (error) {
     if (!res.headersSent) {
+      if (error instanceof RequestBodyError) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ error: "Bad Request" }));
+        return;
+      }
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.end(JSON.stringify({ error: "Internal Server Error" }));

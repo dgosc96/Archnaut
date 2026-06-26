@@ -275,6 +275,34 @@ describe("MCP read tools", () => {
     expect(planned.nodes[0]!.id).toBe("cmp.ui");
   });
 
+  it("returns 400 for malformed JSON body", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not-json",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
+  it("returns 400 when request body exceeds size limit", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "x".repeat(1024 * 1024 + 1),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
   it("GET /health still returns 200 after MCP wiring", async () => {
     store = await makeStore();
     server = await startServer(store, 0);
