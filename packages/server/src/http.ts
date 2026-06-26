@@ -5,6 +5,7 @@ import {
   type ServerResponse,
 } from "node:http";
 
+import { handleMcpRequest } from "./mcp.js";
 import type { Store } from "./store.js";
 
 /** JSON body returned by `GET /health`. */
@@ -16,6 +17,11 @@ export interface HealthResponse {
 /** JSON body returned for unknown routes. */
 export interface NotFoundResponse {
   error: "Not Found";
+}
+
+/** JSON body returned for unhandled server errors. */
+export interface InternalErrorResponse {
+  error: "Internal Server Error";
 }
 
 /** Fallback pathname when `url` cannot be parsed; routes to 404. */
@@ -45,7 +51,7 @@ function parsePathname(url: string | undefined): string {
 function sendJson(
   res: ServerResponse,
   status: number,
-  body: HealthResponse | NotFoundResponse,
+  body: HealthResponse | NotFoundResponse | InternalErrorResponse,
 ): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -55,20 +61,25 @@ function sendJson(
 /**
  * Route incoming HTTP requests to handlers or return 404.
  *
- * @param _store - Runtime store (reserved for future MCP/architecture routes).
+ * @param store - Runtime store for `/api/mcp` tool handlers.
  * @param req - Incoming HTTP request.
  * @param res - HTTP response to complete.
  */
-function handleRequest(
-  _store: Store,
+async function handleRequest(
+  store: Store,
   req: IncomingMessage,
   res: ServerResponse,
-): void {
+): Promise<void> {
   const method = req.method ?? "GET";
   const pathname = parsePathname(req.url);
 
   if (method === "GET" && pathname === "/health") {
     sendJson(res, 200, { ok: true, uptime: process.uptime() });
+    return;
+  }
+
+  if (method === "POST" && pathname === "/api/mcp") {
+    await handleMcpRequest(store, req, res);
     return;
   }
 
@@ -83,7 +94,15 @@ function handleRequest(
  * @returns Node HTTP server instance (not yet listening).
  */
 export function createHttpServer(store: Store): Server {
-  return createServer((req, res) => handleRequest(store, req, res));
+  const onError = (err: unknown, _req: IncomingMessage, res: ServerResponse) => {
+    if (res.headersSent) return;
+    console.error("Unhandled HTTP error:", err);
+    sendJson(res, 500, { error: "Internal Server Error" });
+  };
+
+  return createServer((req, res) => {
+    void handleRequest(store, req, res).catch((err) => onError(err, req, res));
+  });
 }
 
 /**
