@@ -1,5 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import type { Server } from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -80,6 +81,70 @@ async function closeServer(srv: Server): Promise<void> {
   await new Promise<void>((resolve, reject) =>
     srv.close((err) => (err ? reject(err) : resolve())),
   );
+}
+
+const MCP_TOOL_CALL_BODY = JSON.stringify({
+  jsonrpc: "2.0",
+  id: 1,
+  method: "tools/call",
+  params: { name: "getarchitecture", arguments: {} },
+});
+
+/** Send a raw HTTP/1.1 POST to /api/mcp with custom Host (and optional Origin). */
+async function rawPost(
+  port: number,
+  hostHeader: string,
+  body: string,
+  origin?: string,
+): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const client = net.connect(port, "127.0.0.1", () => {
+      let request =
+        `POST /api/mcp HTTP/1.1\r\n` +
+        `Host: ${hostHeader}\r\n` +
+        `Content-Type: application/json\r\n` +
+        `Content-Length: ${Buffer.byteLength(body)}\r\n`;
+      if (origin !== undefined) {
+        request += `Origin: ${origin}\r\n`;
+      }
+      request += `Connection: close\r\n\r\n${body}`;
+      client.write(request);
+    });
+    let data = "";
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      client.destroy();
+      reject(new Error(`rawPost timed out for Host: ${hostHeader}`));
+    }, 5_000);
+
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      fn();
+    };
+
+    client.on("data", (chunk) => {
+      data += chunk.toString();
+    });
+    client.on("close", () => {
+      settle(() => {
+        const [head, ...rest] = data.split("\r\n\r\n");
+        const statusLine = head.split("\r\n")[0] ?? "";
+        const statusCode = Number(statusLine.split(" ")[1]);
+        if (!Number.isInteger(statusCode)) {
+          reject(new Error(`rawPost received invalid HTTP response: "${statusLine}"`));
+          return;
+        }
+        resolve({ statusCode, body: rest.join("\r\n\r\n") });
+      });
+    });
+    client.on("error", (err) => {
+      settle(() => reject(err));
+    });
+  });
 }
 
 async function callTool(port: number, toolName: string, args: Record<string, unknown> = {}) {
@@ -311,5 +376,64 @@ describe("MCP read tools", () => {
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, uptime: expect.any(Number) });
+  });
+});
+
+describe("MCP DNS rebinding protection", () => {
+  it("accepts requests with localhost Host header", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode } = await rawPost(port, `127.0.0.1:${port}`, MCP_TOOL_CALL_BODY);
+    expect(statusCode).toBe(200);
+  });
+
+  it("accepts requests without Origin header", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode } = await rawPost(port, `127.0.0.1:${port}`, MCP_TOOL_CALL_BODY);
+    expect(statusCode).toBe(200);
+  });
+
+  it("rejects requests with non-localhost Host header", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode, body } = await rawPost(port, "evil.example", MCP_TOOL_CALL_BODY);
+    expect(statusCode).toBe(403);
+    const parsed = JSON.parse(body) as {
+      jsonrpc: string;
+      error: { code: number; message: string };
+      id: null;
+    };
+    expect(parsed.jsonrpc).toBe("2.0");
+    expect(parsed.error.code).toBe(-32_000);
+    expect(parsed.error.message).toMatch(/Invalid Host header/i);
+    expect(parsed.id).toBeNull();
+  });
+
+  it("rejects requests with non-localhost Origin header", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode, body } = await rawPost(
+      port,
+      `127.0.0.1:${port}`,
+      MCP_TOOL_CALL_BODY,
+      "http://evil.example",
+    );
+    expect(statusCode).toBe(403);
+    const parsed = JSON.parse(body) as {
+      jsonrpc: string;
+      error: { code: number; message: string };
+      id: null;
+    };
+    expect(parsed.error.code).toBe(-32_000);
+    expect(parsed.error.message).toMatch(/Invalid Origin header/i);
   });
 });

@@ -104,6 +104,62 @@ function ensureMcpAcceptHeaders(req: IncomingMessage): void {
   }
 }
 
+/** Localhost hostnames permitted for MCP (DNS rebinding protection). */
+const ALLOWED_MCP_HOSTNAMES = ["localhost", "127.0.0.1", "::1"] as const;
+
+function parseHostHeader(hostHeader: string | undefined): string | null {
+  if (!hostHeader) return null;
+  try {
+    return new URL(`http://${hostHeader}`).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedMcpHostname(hostname: string): boolean {
+  return (ALLOWED_MCP_HOSTNAMES as readonly string[]).includes(hostname);
+}
+
+/**
+ * Validate Host and Origin headers against localhost allowlist (DNS rebinding protection).
+ *
+ * @param req - Incoming HTTP request to validate.
+ * @returns Error message when validation fails, otherwise `undefined`.
+ */
+function validateMcpDnsRebinding(req: IncomingMessage): string | undefined {
+  const hostHeader = req.headers.host;
+  const hostname = parseHostHeader(hostHeader);
+  if (!hostname || !isAllowedMcpHostname(hostname)) {
+    return `Invalid Host header: ${hostHeader ?? "(missing)"}`;
+  }
+
+  const originHeader = req.headers.origin;
+  if (originHeader) {
+    try {
+      const originHostname = new URL(originHeader).hostname;
+      if (!isAllowedMcpHostname(originHostname)) {
+        return `Invalid Origin header: ${originHeader}`;
+      }
+    } catch {
+      return `Invalid Origin header: ${originHeader}`;
+    }
+  }
+
+  return undefined;
+}
+
+function sendMcpForbidden(res: ServerResponse, message: string): void {
+  res.statusCode = 403;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: { code: -32_000, message },
+      id: null,
+    }),
+  );
+}
+
 /**
  * Build the long-lived MCP server with read-only architecture tools.
  *
@@ -222,6 +278,12 @@ export async function handleMcpRequest(
   });
 
   try {
+    const rebindingError = validateMcpDnsRebinding(req);
+    if (rebindingError) {
+      sendMcpForbidden(res, rebindingError);
+      return;
+    }
+
     ensureMcpAcceptHeaders(req);
     const body = await readRequestBody(req);
     await mcpServer.connect(transport);
