@@ -3,7 +3,14 @@ import type { Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { clearDb, initDbFromFile, type ArchnautFileV1, type Concern, type Edge, type Node } from "@archnaut/core";
+import {
+  clearDb,
+  initDbFromFile,
+  type ArchnautFileV1,
+  type Concern,
+  type Edge,
+  type Node,
+} from "../../core/src/index.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { startServer } from "../src/http.js";
@@ -147,6 +154,26 @@ describe("MCP read tools", () => {
     const { isError, text } = parseToolResult(body);
     expect(isError).toBe(true);
     expect(text).toMatch(/Architecture is empty/i);
+  });
+
+  it("getarchitecture returns distinct error when snapshot read fails", async () => {
+    store = await makeStore();
+    seedStore(store);
+    store
+      .getDb()
+      .prepare(`UPDATE nodes SET metadata_json = ? WHERE id = ?`)
+      .run("{invalid", "cmp.api");
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const res = await callTool(port, "getarchitecture");
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
+    const { isError, text } = parseToolResult(body);
+    expect(isError).toBe(true);
+    expect(text).not.toMatch(/Architecture is empty/i);
+    expect(text).toMatch(/Failed to read architecture snapshot:/i);
   });
 
   it("getcomponentcontext returns node, edges, and concerns for known id", async () => {

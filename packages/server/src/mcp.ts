@@ -11,14 +11,23 @@ type SnapshotResult =
   | ArchnautFileV1
   | { isError: true; message: string };
 
+const EMPTY_ARCHITECTURE_ERROR = "Database has no project row";
+
 function tryGetSnapshot(store: Store): SnapshotResult {
   try {
     return getArchitectureSnapshot(store.getDb());
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === EMPTY_ARCHITECTURE_ERROR) {
+      return {
+        isError: true,
+        message:
+          "Architecture is empty. Run the scan skill in your AI tool to populate it.",
+      };
+    }
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       isError: true,
-      message:
-        "Architecture is empty. Run the scan skill in your AI tool to populate it.",
+      message: `Failed to read architecture snapshot: ${detail}`,
     };
   }
 }
