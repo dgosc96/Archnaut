@@ -354,6 +354,20 @@ describe("MCP read tools", () => {
     expect(await res.json()).toEqual({ error: "Bad Request" });
   });
 
+  it("returns 400 for empty POST body", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Bad Request" });
+  });
+
   it("returns 400 when request body exceeds size limit", async () => {
     store = await makeStore();
     server = await startServer(store, 0);
@@ -386,6 +400,29 @@ describe("MCP DNS rebinding protection", () => {
     const port = getServerPort(server);
 
     const { statusCode } = await rawPost(port, `127.0.0.1:${port}`, MCP_TOOL_CALL_BODY);
+    expect(statusCode).toBe(200);
+  });
+
+  it("accepts requests with bracketed IPv6 Host header", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode } = await rawPost(port, `[::1]:${port}`, MCP_TOOL_CALL_BODY);
+    expect(statusCode).toBe(200);
+  });
+
+  it("accepts requests with bracketed IPv6 Origin header", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const { statusCode } = await rawPost(
+      port,
+      `127.0.0.1:${port}`,
+      MCP_TOOL_CALL_BODY,
+      `http://[::1]:${port}`,
+    );
     expect(statusCode).toBe(200);
   });
 

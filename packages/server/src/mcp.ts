@@ -68,7 +68,7 @@ async function readRequestBody(req: IncomingMessage): Promise<unknown> {
     chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return undefined;
+  if (!raw) throw new RequestBodyError("Empty request body");
   try {
     return JSON.parse(raw);
   } catch {
@@ -116,8 +116,15 @@ function parseHostHeader(hostHeader: string | undefined): string | null {
   }
 }
 
+function normalizeHostname(hostname: string): string {
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    return hostname.slice(1, -1);
+  }
+  return hostname;
+}
+
 function isAllowedMcpHostname(hostname: string): boolean {
-  return (ALLOWED_MCP_HOSTNAMES as readonly string[]).includes(hostname);
+  return (ALLOWED_MCP_HOSTNAMES as readonly string[]).includes(normalizeHostname(hostname));
 }
 
 /**
