@@ -1,6 +1,6 @@
 # Current State
 
-**Status:** `@archnaut/server` v0.1 implemented (MCP read tools complete)
+**Status:** `@archnaut/server` v0.1 MCP read + stateless write tools complete
 **Version target:** v0.1 (MVP)
 **Package manager:** pnpm workspaces
 
@@ -15,26 +15,34 @@
 - Deterministic normalization + stable JSON serialization
 - Semantic ID parse/generate helpers
 - Atomic `archnaut.json` repository (load/save)
-- SQLite projection (`migrateDb`, `initDbFromFile`, `rebuildDbFromFile`, `getArchitectureSnapshot`)
-- `loadValidateNormalize` / `persistArchitecture` pipeline service
-- 27 vitest tests passing; `pnpm build` succeeds
+- SQLite projection (`migrateDb`, `initDbFromFile`, `rebuildDbFromFile`, `getArchitectureSnapshot`, `clearNodesAndEdges`)
+- DB mutation primitives (`upsertNode`, `upsertEdge`, `patchNode`, `insertConcern`, existence checks)
+- `loadValidateNormalize` / `persistArchitecture` / `applyArchitectureMutation` pipeline service (serialized mutations with DB + file rollback)
+- 50 vitest tests passing; `pnpm build` succeeds
 
-### `packages/server` (`@archnaut/server`) — runtime store + HTTP + MCP read tools
+### `packages/server` (`@archnaut/server`) — runtime store + HTTP + MCP read/write tools
 - `createStore(archJsonPath, options?)` → opens SQLite at `.archnaut/db.sqlite` (or `:memory:` in tests), migrates schema, hydrates from `archnaut.json` if present
 - `createHttpServer(store)` / `startServer(store, port)` — single-port Node `http` server
 - `GET /health` → `{ ok: true, uptime: number }`
-- `POST /api/mcp` — MCP Streamable HTTP transport (`@modelcontextprotocol/sdk`)
+- `POST /api/mcp` — MCP Streamable HTTP transport (`@modelcontextprotocol/sdk`); MCP code split into `src/mcp/` (`http.ts`, `responses.ts`, `tools.ts`, `index.ts`)
+- **Read tools:**
   - `getarchitecture` — returns full `ArchnautFileV1` snapshot as JSON
   - `getcomponentcontext(id)` — returns node + its edges + open concerns
   - `getplannedfeatures` — returns all `status: "planned"` nodes and their edges
+- **Write tools** (mutate SQLite, persist to `archnaut.json` via `applyArchitectureMutation`):
+  - `cleararchitecture` — wipe nodes/edges/concerns; keep project/workspaces/meta
+  - `addnode` — insert or full-replace a node
+  - `addedge` — insert or full-replace an edge
+  - `setnodemetadata` — partial update on an existing node
+  - `flagconcern` — append an architectural concern
 - DNS rebinding protection on `/api/mcp` (Host + Origin allowlist)
-- Request body hardening: 1 MiB size limit, empty body 400, malformed JSON 400
+- Request body hardening: 1 MiB size limit (413 Payload Too Large), empty body 400, malformed JSON 400
 - Structured error logging on MCP handler failures (TODO: wire to package logger)
-- 20 vitest tests passing (MCP read tools + DNS rebinding + HTTP regression); `pnpm build` succeeds
+- 46 vitest tests passing (MCP read + write tools + DNS rebinding + HTTP regression); `pnpm build` succeeds
 
 ## Not yet built
 
-- MCP **write tools** (`cleararchitecture`, `addnode`, `addedge`, `setnodemetadata`, `flagconcern`, `begin_task`, `complete_task`, `markimplemented`, `updatearchitecture`)
+- MCP **task lifecycle tools** (`begin_task`, `complete_task`, `markimplemented`, `updatearchitecture`) — requires new `tasks` table in SQLite schema
 - `packages/cli` (`archnaut init/start/stop/status/scan`)
 - `packages/web` (React + Vite SPA, React Flow diagram)
 - `packages/mcp-shim` (stdio-to-HTTP proxy for tools requiring subprocess transport)
@@ -43,19 +51,13 @@
 
 ## Next immediate step
 
-Implement MCP write tools in `packages/server`:
+Implement MCP task lifecycle tools in `packages/server`:
 
-**Stateless mutation tools** (no schema changes needed):
-- `cleararchitecture` — wipe runtime DB projection
-- `addnode` — insert or upsert a node
-- `addedge` — insert or upsert an edge
-- `setnodemetadata` — update description, tech, layer, files, tags on an existing node
-- `flagconcern` — append a concern
-
-**Task lifecycle tools** (requires new `tasks` table in SQLite schema):
 - `begin_task` — declare task, soft-claim target nodes, return task context
 - `complete_task` — validate, transition planned → implemented, persist `archnaut.json`
 - `markimplemented` — low-level single-node implementation helper (used by web UI)
 - `updatearchitecture` — informational; instructs developer to re-run the scan skill
 
-After implementing these tools, proceed to `packages/cli` (daemon fork, `archnaut start/stop/status/init`).
+These require a new `tasks` table in the SQLite schema (`packages/core/src/db/migrate.ts`).
+
+After task lifecycle tools, proceed to `packages/cli` (daemon fork, `archnaut start/stop/status/init`).
