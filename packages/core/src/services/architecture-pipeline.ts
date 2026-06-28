@@ -5,6 +5,15 @@ import { normalizeArchnautFile } from "../normalize/normalize-archnaut-file.js";
 import { loadArchnautFile } from "../repository/load.js";
 import { saveArchnautFile } from "../repository/save.js";
 import { initDbFromFile } from "../db/init-from-file.js";
+import { getArchitectureSnapshot } from "../db/queries.js";
+
+let mutationChain: Promise<void> = Promise.resolve();
+
+function withMutationLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = mutationChain.then(fn, fn);
+  mutationChain = next.then(() => undefined, () => undefined);
+  return next;
+}
 
 /**
  * Load, validate, and normalize `archnaut.json` in one step.
@@ -45,4 +54,47 @@ export async function persistArchitecture(
   if (db) {
     initDbFromFile(normalized, db);
   }
+}
+
+/**
+ * Apply a synchronous DB mutation and persist the result to `archnaut.json`.
+ *
+ * @param path - Target path for the canonical architecture file.
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param mutate - Synchronous function that mutates the SQLite projection in-place.
+ * @returns Resolves when the mutation and persist complete successfully.
+ * @throws When `mutate` throws; rolls back the DB to the pre-mutation snapshot.
+ * @throws When persistence fails; rolls back the DB to the pre-mutation snapshot and
+ *   attempts a best-effort file restore (original error is always re-thrown).
+ */
+export async function applyArchitectureMutation(
+  path: string,
+  db: Database.Database,
+  mutate: () => void,
+): Promise<void> {
+  return withMutationLock(async () => {
+    const before = getArchitectureSnapshot(db);
+    try {
+      mutate();
+    } catch (error) {
+      initDbFromFile(before, db);
+      throw error;
+    }
+    const after = getArchitectureSnapshot(db);
+    try {
+      await persistArchitecture(path, after, db);
+    } catch (error) {
+      try {
+        initDbFromFile(before, db);
+      } catch {
+        // best-effort DB rollback; original error takes precedence
+      }
+      try {
+        await saveArchnautFile(path, before, { normalize: false });
+      } catch {
+        // best-effort file rollback; original error takes precedence
+      }
+      throw error;
+    }
+  });
 }

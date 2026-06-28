@@ -93,4 +93,8 @@ export {
 } from "./db/mutations.js";
 
 // Services
-export { loadValidateNormalize, persistArchitecture } from "./services/architecture-pipeline.js";
+export {
+  loadValidateNormalize,
+  persistArchitecture,
+  applyArchitectureMutation,
+} from "./services/architecture-pipeline.js";

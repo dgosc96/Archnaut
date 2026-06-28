@@ -1,13 +1,23 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../../src/db/init-from-file.js", async () => {
+  const real = await vi.importActual<typeof import("../../src/db/init-from-file.js")>(
+    "../../src/db/init-from-file.js",
+  );
+  return { initDbFromFile: vi.fn(real.initDbFromFile) };
+});
+
+import { initDbFromFile } from "../../src/db/init-from-file.js";
 import { migrateDb } from "../../src/db/migrate.js";
 import { getArchitectureSnapshot } from "../../src/db/queries.js";
+import { upsertNode } from "../../src/db/mutations.js";
 import {
+  applyArchitectureMutation,
   loadValidateNormalize,
   persistArchitecture,
 } from "../../src/services/architecture-pipeline.js";
@@ -17,6 +27,7 @@ import { shopPlatformFixture } from "../fixtures/shop-platform.js";
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.mocked(initDbFromFile).mockClear();
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -47,6 +58,82 @@ describe("architecture pipeline", () => {
     await persistArchitecture(filePath, shopPlatformFixture, db);
     const snapshot = getArchitectureSnapshot(db);
     expect(snapshot.project.name).toBe("Shop Platform");
+    db.close();
+  });
+
+  it("applyArchitectureMutation rolls back DB when mutate throws", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+    const before = getArchitectureSnapshot(db);
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, { id: "cmp.canary", name: "Canary", kind: "component", status: "planned", files: [] });
+        throw new Error("mutate failed");
+      }),
+    ).rejects.toThrow("mutate failed");
+
+    const after = getArchitectureSnapshot(db);
+    expect(after).toEqual(before);
+    db.close();
+  });
+
+  it("applyArchitectureMutation rolls back DB and file when initDbFromFile throws during persist", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+    const before = getArchitectureSnapshot(db);
+    const jsonBefore = await readFile(filePath, "utf8");
+
+    // First call (inside persistArchitecture) throws; rollback call uses real impl
+    vi.mocked(initDbFromFile).mockImplementationOnce(() => {
+      throw new Error("simulated DB init failure");
+    });
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, { id: "cmp.extra", name: "Extra", kind: "component", status: "planned", files: [] });
+      }),
+    ).rejects.toThrow("simulated DB init failure");
+
+    expect(getArchitectureSnapshot(db)).toEqual(before);
+    expect(await readFile(filePath, "utf8")).toBe(jsonBefore);
+    db.close();
+  });
+
+  it("applyArchitectureMutation restores file when DB rollback also fails during persist cleanup", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+    const before = getArchitectureSnapshot(db);
+    const jsonBefore = await readFile(filePath, "utf8");
+
+    vi.mocked(initDbFromFile)
+      .mockImplementationOnce(() => {
+        throw new Error("simulated DB init failure");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("simulated DB rollback failure");
+      });
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, { id: "cmp.extra", name: "Extra", kind: "component", status: "planned", files: [] });
+      }),
+    ).rejects.toThrow("simulated DB init failure");
+
+    expect(getArchitectureSnapshot(db)).not.toEqual(before);
+    expect(await readFile(filePath, "utf8")).toBe(jsonBefore);
     db.close();
   });
 });
