@@ -75,10 +75,22 @@ export {
 } from "./repository/archnaut-repository.js";
 
 // DB projection
-export { migrateDb, clearDb } from "./db/migrate.js";
+export { migrateDb, clearDb, clearNodesAndEdges } from "./db/migrate.js";
 export { initDbFromFile } from "./db/init-from-file.js";
 export { rebuildDbFromFile } from "./db/rebuild-from-file.js";
 export { getArchitectureSnapshot } from "./db/queries.js";
+export {
+  nodeExists,
+  workspaceExists,
+  upsertNode,
+  upsertEdge,
+  patchNode,
+  insertConcern,
+  type UpsertNodeInput,
+  type UpsertEdgeInput,
+  type PatchNodeInput,
+  type InsertConcernInput,
+} from "./db/mutations.js";
 
 // Services
 export { loadValidateNormalize, persistArchitecture } from "./services/architecture-pipeline.js";

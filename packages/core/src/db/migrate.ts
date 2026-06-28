@@ -100,3 +100,22 @@ export function clearDb(db: Database.Database): void {
     DELETE FROM meta;
   `);
 }
+
+/**
+ * Delete graph projection rows (nodes, edges, concerns) while keeping project metadata.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ *
+ * @remarks Used by `cleararchitecture` before a rescan so `project`, `workspaces`, and `meta`
+ * remain available for subsequent `addnode` / `persistArchitecture` calls.
+ */
+export function clearNodesAndEdges(db: Database.Database): void {
+  db.exec(`
+    DELETE FROM node_files;
+    DELETE FROM node_tags;
+    DELETE FROM node_tech;
+    DELETE FROM edges;
+    DELETE FROM nodes;
+    DELETE FROM concerns;
+  `);
+}

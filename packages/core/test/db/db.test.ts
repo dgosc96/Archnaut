@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { getArchitectureSnapshot } from "../../src/db/queries.js";
 import { initDbFromFile } from "../../src/db/init-from-file.js";
-import { migrateDb, clearDb } from "../../src/db/migrate.js";
+import { migrateDb, clearDb, clearNodesAndEdges } from "../../src/db/migrate.js";
 import { rebuildDbFromFile } from "../../src/db/rebuild-from-file.js";
 import { normalizeArchnautFile } from "../../src/normalize/normalize-archnaut-file.js";
 import { saveArchnautFile } from "../../src/repository/save.js";
@@ -81,6 +81,33 @@ describe("SQLite projection", () => {
     clearDb(db);
     const count = db.prepare(`SELECT COUNT(*) AS c FROM nodes`).get() as { c: number };
     expect(count.c).toBe(0);
+    db.close();
+  });
+
+  it("clearNodesAndEdges removes graph rows but keeps project and workspaces", () => {
+    const db = new Database(":memory:");
+    migrateDb(db);
+    const normalized = normalizeArchnautFile(shopPlatformFixture);
+    initDbFromFile(normalized, db);
+    clearNodesAndEdges(db);
+
+    const nodes = db.prepare(`SELECT COUNT(*) AS c FROM nodes`).get() as { c: number };
+    const edges = db.prepare(`SELECT COUNT(*) AS c FROM edges`).get() as { c: number };
+    const concerns = db.prepare(`SELECT COUNT(*) AS c FROM concerns`).get() as { c: number };
+    const project = db.prepare(`SELECT COUNT(*) AS c FROM project`).get() as { c: number };
+    const workspaces = db.prepare(`SELECT COUNT(*) AS c FROM workspaces`).get() as { c: number };
+    expect(nodes.c).toBe(0);
+    expect(edges.c).toBe(0);
+    expect(concerns.c).toBe(0);
+    expect(project.c).toBe(1);
+    expect(workspaces.c).toBe(normalized.workspaces.length);
+
+    const snapshot = getArchitectureSnapshot(db);
+    expect(snapshot.project.id).toBe(normalized.project.id);
+    expect(snapshot.workspaces).toEqual(normalized.workspaces);
+    expect(snapshot.nodes).toHaveLength(0);
+    expect(snapshot.edges).toHaveLength(0);
+    expect(snapshot.concerns).toHaveLength(0);
     db.close();
   });
 });
