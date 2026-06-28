@@ -1,49 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { getArchitectureSnapshot, type ArchnautFileV1 } from "@archnaut/core";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod";
 
-import type { Store } from "./store.js";
-
-type SnapshotResult =
-  | ArchnautFileV1
-  | { isError: true; message: string };
-
-const EMPTY_ARCHITECTURE_ERROR = "Database has no project row";
-
-function tryGetSnapshot(store: Store): SnapshotResult {
-  try {
-    return getArchitectureSnapshot(store.getDb());
-  } catch (error) {
-    if (error instanceof Error && error.message === EMPTY_ARCHITECTURE_ERROR) {
-      return {
-        isError: true,
-        message:
-          "Architecture is empty. Run the scan skill in your AI tool to populate it.",
-      };
-    }
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      isError: true,
-      message: `Failed to read architecture snapshot: ${detail}`,
-    };
-  }
-}
-
-function errorResult(message: string) {
-  return {
-    content: [{ type: "text" as const, text: message }],
-    isError: true as const,
-  };
-}
-
-function jsonResult(data: unknown) {
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
-  };
-}
+import type { Store } from "../store.js";
+import { createMcpServer } from "./tools.js";
 
 /** Maximum MCP request body size (1 MiB). */
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
@@ -55,6 +15,13 @@ class RequestBodyError extends Error {
   }
 }
 
+class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super("Request body too large");
+    this.name = "RequestBodyTooLargeError";
+  }
+}
+
 async function readRequestBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -63,7 +30,7 @@ async function readRequestBody(req: IncomingMessage): Promise<unknown> {
     size += buf.length;
     if (size > MAX_REQUEST_BODY_BYTES) {
       req.resume();
-      throw new RequestBodyError("Request body too large");
+      throw new RequestBodyTooLargeError();
     }
     chunks.push(buf);
   }
@@ -168,81 +135,6 @@ function sendMcpForbidden(res: ServerResponse, message: string): void {
 }
 
 /**
- * Build the long-lived MCP server with read-only architecture tools.
- *
- * @param store - Runtime store for SQLite projection access.
- * @returns Configured MCP server instance (no transport attached).
- */
-export function createMcpServer(store: Store): McpServer {
-  const server = new McpServer({ name: "archnaut", version: "0.1.0" });
-
-  server.registerTool(
-    "getarchitecture",
-    {
-      description: "Return the full architecture graph as structured JSON.",
-      inputSchema: {},
-    },
-    async () => {
-      const snapshot = tryGetSnapshot(store);
-      if ("isError" in snapshot) {
-        return errorResult(snapshot.message);
-      }
-      return jsonResult(snapshot);
-    },
-  );
-
-  server.registerTool(
-    "getcomponentcontext",
-    {
-      description: "Return focused context for a single architecture node.",
-      inputSchema: {
-        id: z.string().min(1).describe("Node ID (e.g. cmp.api.checkout)"),
-      },
-    },
-    async ({ id }) => {
-      const snapshot = tryGetSnapshot(store);
-      if ("isError" in snapshot) {
-        return errorResult(snapshot.message);
-      }
-
-      const node = snapshot.nodes.find((n) => n.id === id);
-      if (!node) {
-        return errorResult(`Component '${id}' not found in architecture.`);
-      }
-
-      const edges = snapshot.edges.filter((e) => e.from === id || e.to === id);
-      const concerns = snapshot.concerns.filter((c) => c.scope === id);
-
-      return jsonResult({ node, edges, concerns });
-    },
-  );
-
-  server.registerTool(
-    "getplannedfeatures",
-    {
-      description: "Return all planned (not yet implemented) components and related edges.",
-      inputSchema: {},
-    },
-    async () => {
-      const snapshot = tryGetSnapshot(store);
-      if ("isError" in snapshot) {
-        return errorResult(snapshot.message);
-      }
-
-      const nodes = snapshot.nodes.filter((n) => n.status === "planned");
-      const plannedIds = new Set(nodes.map((n) => n.id));
-      const edges = snapshot.edges.filter(
-        (e) => plannedIds.has(e.from) || plannedIds.has(e.to),
-      );
-
-      return jsonResult({ nodes, edges, total: nodes.length });
-    },
-  );
-
-  return server;
-}
-
-/**
  * Create a stateless Streamable HTTP transport for a single MCP request.
  *
  * @returns Transport configured for JSON responses without session IDs.
@@ -297,6 +189,12 @@ export async function handleMcpRequest(
     await transport.handleRequest(req, res, body);
   } catch (error) {
     if (!res.headersSent) {
+      if (error instanceof RequestBodyTooLargeError) {
+        res.statusCode = 413;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ error: "Payload Too Large" }));
+        return;
+      }
       if (error instanceof RequestBodyError) {
         res.statusCode = 400;
         res.setHeader("Content-Type", "application/json; charset=utf-8");

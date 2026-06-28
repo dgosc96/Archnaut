@@ -368,7 +368,7 @@ describe("MCP read tools", () => {
     expect(await res.json()).toEqual({ error: "Bad Request" });
   });
 
-  it("returns 400 when request body exceeds size limit", async () => {
+  it("returns 413 when request body exceeds size limit", async () => {
     store = await makeStore();
     server = await startServer(store, 0);
     const port = getServerPort(server);
@@ -378,8 +378,8 @@ describe("MCP read tools", () => {
       headers: { "Content-Type": "application/json" },
       body: "x".repeat(1024 * 1024 + 1),
     });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "Bad Request" });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "Payload Too Large" });
   });
 
   it("GET /health still returns 200 after MCP wiring", async () => {

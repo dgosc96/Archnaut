@@ -5,7 +5,7 @@ import {
   type ServerResponse,
 } from "node:http";
 
-import { handleMcpRequest } from "./mcp.js";
+import { handleMcpRequest } from "./mcp/index.js";
 import type { Store } from "./store.js";
 
 /** JSON body returned by `GET /health`. */
