@@ -37,13 +37,13 @@ This is a Node.js monorepo. Package manager: pnpm workspaces.
 ```
 /
 ├── packages/
-│   ├── cli/           # CLI entry point — Commander.js, archnaut init/start/stop/status/scan
-│   ├── daemon/        # Self-daemonizing background process manager
-│   ├── mcp-server/    # MCP server, read-tools, write-tools
-│   ├── mcp-shim/      # Thin stdio-to-HTTP proxy shim
-│   ├── web-ui/        # React + Vite SPA (pre-built dist/ bundled into npm package)
-│   ├── rules-engine/  # Generates and installs AI tool config files
-│   └── shared/        # Shared TypeScript types and schemas
+│   ├── core/          # @archnaut/core — domain model, validation, normalization, SQLite projection
+│   ├── server/        # @archnaut/server — HTTP, MCP, runtime store
+│   ├── cli/           # CLI entry point — Commander.js, archnaut init/start/stop/status/scan (planned)
+│   ├── daemon/        # Self-daemonizing background process manager (planned)
+│   ├── mcp-shim/      # Thin stdio-to-HTTP proxy shim (planned)
+│   ├── web-ui/        # React + Vite SPA (pre-built dist/ bundled into npm package) (planned)
+│   └── rules-engine/  # Generates and installs AI tool config files (planned)
 ├── PROJECT.md          # Authoritative product definition (source of truth for scope & specs)
 ├── CONTRIBUTING.md     # Project style guide (coding conventions, commits, PR workflow)
 ├── archnaut.json       # Canonical committed architecture artifact (do not gitignore)
@@ -52,9 +52,9 @@ This is a Node.js monorepo. Package manager: pnpm workspaces.
 
 # Module Boundaries — Never Cross These
 
-- `cli` may import from `daemon`, `rules-engine`, `shared` — nothing else
-- `mcp-server` may import from `shared` — NOT from `cli` or `web-ui`
-- `web-ui` may import from `shared` — NOT from `cli` or `mcp-server`
+- `cli` may import from `daemon`, `rules-engine`, `core` — nothing else
+- `server` may import from `core` — NOT from `cli` or `web-ui`
+- `web-ui` may import from `core` — NOT from `cli` or `server`
 - `daemon` has no imports from other packages — it manages process lifecycle only
 - `mcp-shim` has no imports from other packages — it is a stateless proxy
 
@@ -99,30 +99,34 @@ IDs are assigned and preserved by the MCP server. Never generate IDs outside the
 
 # MCP Tools Reference (v0.1)
 
-**Read tools:**
+**Read tools (implemented):**
 - `getarchitecture` — full architecture graph as structured context
 - `getcomponentcontext(name)` — focused context for a single component
 - `getplannedfeatures` — all components marked planned but not yet implemented
 
-**Write tools (agents call these — never direct file/DB writes):**
+**Write tools — implemented (agents call these — never direct file/DB writes):**
+- `cleararchitecture` — reset diagram before a full rescan
+- `addnode(component)` — add or full-replace a discovered or planned component
+- `addedge(from, to, type)` — add or full-replace a dependency relationship
+- `setnodemetadata(id, metadata)` — partial update on an existing node
+- `flagconcern(description)` — surface architectural concern for human review
+
+**Write tools — pending (v0.1, not yet implemented):**
 - `begin_task(taskId, agentId, summary, targetNodeIds, [plannedFeatureIds])` — declare task start
-- `addnode(component)` — add a discovered or planned component
-- `addedge(from, to, type)` — add a dependency relationship
-- `setnodemetadata(id, metadata)` — enrich a node with details
 - `markimplemented(featureId)` — low-level state transition (UI-facing; agents prefer complete_task)
 - `complete_task(taskId, status, [implementedNodeIds], [notes])` — finalize task, trigger normalization
 - `updatearchitecture` — trigger full rescan prompt
-- `flagconcern(description)` — surface architectural concern for human review
-- `cleararchitecture` — reset diagram before full rescan
+
+Mutations flow: MCP tool → `applyArchitectureMutation` (in `@archnaut/core`) → SQLite → normalized `archnaut.json`.
 
 # Agent Workflow Pattern
 
 When implementing a feature:
 1. Call `getarchitecture` to read current state (requires daemon running)
-2. Call `begin_task` with `taskId`, `agentId`, `summary`, `targetNodeIds`
+2. Call `begin_task` with `taskId`, `agentId`, `summary`, `targetNodeIds` *(not available yet — use stateless write tools until task lifecycle ships)*
 3. Implement the feature; call `addnode`/`addedge`/`setnodemetadata` as needed
-4. Call `complete_task` with `status: "completed"` and `implementedNodeIds`
-5. Never skip `complete_task` — it triggers normalization and persistence
+4. Call `complete_task` with `status: "completed"` and `implementedNodeIds` *(not available yet — set `status: "implemented"` via `setnodemetadata` or `addnode` until task lifecycle ships)*
+5. When task tools ship, never skip `complete_task` — it triggers normalization and persistence
 
 # Session handoff (`CURRENT.md`)
 

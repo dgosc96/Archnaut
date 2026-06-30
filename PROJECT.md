@@ -1,4 +1,4 @@
-Status: Pre-development
+Status: Active development (v0.1 MVP in progress). Implementation progress: see [`CURRENT.md`](CURRENT.md).
 License: Apache 2.0
 npm: `archnaut`
 Version: `0.0.1`
@@ -192,7 +192,8 @@ On initialization, Archnaut installs a tailored set of behavioral guidelines for
 
 - `archnaut` CLI — CLI entry point (`archnaut init`, `start`, `stop`, `status`, `scan`)
 - `daemon` — self-daemonizing background process manager; forks detached child, writes PID to `.archnaut/daemon.pid`, redirects logs to `.archnaut/daemon.log`
-- `mcp-server` — MCP server exposing architecture as tools/resources (Streamable HTTP transport)
+- `@archnaut/core` (`packages/core`) — domain model, validation, normalization, SQLite projection, and mutation pipeline (`applyArchitectureMutation`)
+- `@archnaut/server` (`packages/server`) — HTTP server, MCP Streamable HTTP transport, runtime store; MCP tool handlers in `src/mcp/tools.ts`, persistence delegated to `@archnaut/core`
 - `mcp-shim` — thin stdio-to-HTTP proxy for tools that require stdio transport; installed by `archnaut init` when needed
 - `read-tools` — `getarchitecture`, `getcomponentcontext`, etc.
 - `write-tools` — `addnode`, `addedge`, `markimplemented`, etc.
@@ -965,7 +966,7 @@ A focused first release to validate core assumptions before building the full sy
 3. Creates the local runtime DB from `archnaut.json`
 4. Generates minimal AI tool config files (CLAUDE.md, .cursorrules, AGENTS.md, etc.) for selected tools — one "consult Archnaut first" rules file per tool; advanced architectural constraint rules are post-v0.1
 5. Local web UI displays a live block diagram and component inspector from the runtime store / `archnaut.json` source
-6. MCP server exposes `getarchitecture`, `getcomponentcontext`, `getplannedfeatures`, `begin_task`, `addnode`, `addedge`, `setnodemetadata`, `complete_task`, `markimplemented`, `flagconcern`, `cleararchitecture`, `updatearchitecture`
+6. MCP server exposes `getarchitecture`, `getcomponentcontext`, `getplannedfeatures`, `begin_task`, `addnode`, `addedge`, `setnodemetadata`, `complete_task`, `markimplemented`, `flagconcern`, `cleararchitecture`, `updatearchitecture` — **stateless write tools implemented in `@archnaut/server`** (`cleararchitecture`, `addnode`, `addedge`, `setnodemetadata`, `flagconcern`); **task lifecycle tools pending** (`begin_task`, `complete_task`, `markimplemented`, `updatearchitecture`; requires `tasks` table)
 7. Manual add-planned-feature flow in the web UI, persisted through MCP back to normalized `archnaut.json`
 8. Pre-commit hook soft-warns if daemon is not running; soft-warns if `archnaut.json` is stale
 

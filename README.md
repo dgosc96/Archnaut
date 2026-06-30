@@ -4,6 +4,10 @@
 
 **This package is under active development. Coming soon.**
 
+## Development
+
+The in-repo monorepo already implements `@archnaut/core` (domain layer, SQLite projection, mutation pipeline) and `@archnaut/server` (HTTP, MCP read tools, and stateless write tools). CLI packaging, daemon lifecycle, web UI, and rules/hooks installation are still in progress. See [`CURRENT.md`](CURRENT.md) for the latest implementation status.
+
 ## What it will do
 
 - Scan your repo and visualize architecture as interactive block diagrams

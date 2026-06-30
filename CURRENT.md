@@ -19,7 +19,9 @@
 - SQLite projection (`migrateDb`, `initDbFromFile`, `rebuildDbFromFile`, `getArchitectureSnapshot`, `clearNodesAndEdges`)
 - DB mutation primitives (`upsertNode`, `upsertEdge`, `patchNode`, `insertConcern`, existence checks)
 - `loadValidateNormalize` / `persistArchitecture` / `applyArchitectureMutation` pipeline service (serialized mutations with DB + file rollback)
-- 50 vitest tests passing; `pnpm build` succeeds
+- `readArchitectureSnapshot` — reads under the same lock as mutations
+- `EmptyArchitectureError` — thrown when DB has no project row (empty/uninitialized projection)
+- 53 vitest tests passing; `pnpm build` succeeds
 
 ### `packages/server` (`@archnaut/server`) — runtime store + HTTP + MCP read/write tools
 
@@ -31,24 +33,26 @@
   - `getarchitecture` — returns full `ArchnautFileV1` snapshot as JSON
   - `getcomponentcontext(id)` — returns node + its edges + open concerns
   - `getplannedfeatures` — returns all `status: "planned"` nodes and their edges
-- **Write tools** (mutate SQLite, persist to `archnaut.json` via `applyArchitectureMutation`):
+  - Empty DB returns MCP `isError` with scan-skill guidance (`EmptyArchitectureError` mapped in `tryGetSnapshot`)
+- **Write tools** (mutate SQLite, persist to `archnaut.json` via `applyArchitectureMutation`; validation runs inside the mutation lock):
   - `cleararchitecture` — wipe nodes/edges/concerns; keep project/workspaces/meta
   - `addnode` — insert or full-replace a node
   - `addedge` — insert or full-replace an edge
   - `setnodemetadata` — partial update on an existing node
   - `flagconcern` — append an architectural concern
+- MCP tool annotations on all registered tools (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
 - DNS rebinding protection on `/api/mcp` (Host + Origin allowlist)
 - Request body hardening: 1 MiB size limit (413 Payload Too Large), empty body 400, malformed JSON 400
 - Structured error logging on MCP handler failures (TODO: wire to package logger)
-- 46 vitest tests passing (MCP read + write tools + DNS rebinding + HTTP regression); `pnpm build` succeeds
+- 47 vitest tests passing (MCP read + write tools + DNS rebinding + HTTP regression); `pnpm build` succeeds
 
 ## Not yet built
 
 - MCP **task lifecycle tools** (`begin_task`, `complete_task`, `markimplemented`, `updatearchitecture`) — requires new `tasks` table in SQLite schema
 - `packages/cli` (`archnaut init/start/stop/status/scan`)
-- `packages/web` (React + Vite SPA, React Flow diagram)
+- `packages/web-ui` (React + Vite SPA, React Flow diagram)
 - `packages/mcp-shim` (stdio-to-HTTP proxy for tools requiring subprocess transport)
-- `packages/templates` (skill, rules, hooks templates)
+- `packages/rules-engine` (skill, rules, hooks templates)
 - Dogfooding `archnaut.json` in this repo
 
 ## Next immediate step

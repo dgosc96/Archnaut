@@ -64,13 +64,13 @@ Target monorepo structure (packages are being bootstrapped — see `CURRENT.md`)
     rules/archnaut.mdc   # agent context for this repo (always applied)
     mcp.json             # not yet — added once MCP server is ready for local use
   packages/
-    cli/
-    daemon/
-    mcp-server/
-    mcp-shim/
-    web-ui/
-    rules-engine/
     core/                # @archnaut/core — domain model, validation, SQLite projection
+    server/              # @archnaut/server — HTTP, MCP, runtime store
+    cli/                 # (planned) Commander.js CLI
+    daemon/              # (planned) self-daemonizing process manager
+    mcp-shim/            # (planned) stdio-to-HTTP proxy
+    web-ui/              # (planned) React + Vite SPA
+    rules-engine/        # (planned) AI tool config installer
   PROJECT.md
   CONTRIBUTING.md
   CURRENT.md
@@ -206,20 +206,27 @@ Example:
 
 ```ts
 /**
- * Registers a new component node in the runtime database and persists
- * the change to archnaut.json via the normalization pipeline.
+ * Applies a validated mutation to the SQLite projection and persists
+ * the result to archnaut.json via the normalization pipeline.
  *
- * Skips creation if a node with the same semantic ID already exists —
- * use `setNodeMetadata` to update an existing node.
+ * Skips if validation throws before the mutation runs — the DB and file
+ * are rolled back on any failure inside the callback.
  *
- * @param node - The validated node payload from the MCP tool call.
- * @returns The assigned node ID as stored in the runtime DB.
- * @throws ArchnautValidationError If `node.id` conflicts with a reserved prefix.
+ * @param archPath - Path to the canonical archnaut.json file.
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param mutate - Callback that performs DB mutations after optional validation.
+ * @throws When persistence or normalization fails after a successful mutation.
  *
  * @example
- * await addNode({ id: 'cmp.api.checkout', kind: 'component', status: 'planned', files: [] });
+ * await applyArchitectureMutation(archPath, db, () => {
+ *   upsertNode(db, { id: 'cmp.api.checkout', kind: 'component', status: 'planned', ... });
+ * });
  */
-export async function addNode(node: NodeInput): Promise<string> { ... }
+export async function applyArchitectureMutation(
+  archPath: string,
+  db: Database.Database,
+  mutate: () => void,
+): Promise<void> { ... }
 ```
 
 ### Linting
@@ -248,10 +255,10 @@ The CI pipeline runs this check automatically.
 Use scope‑prefixed, single‑line commit messages:
 
 - Format: `scope: short imperative description`
-- Scope examples: `cli`, `mcp-server`, `web-ui`, `daemon`, `rules`, `core`, `docs`, `repo`
+- Scope examples: `cli`, `server`, `web-ui`, `daemon`, `rules`, `core`, `docs`, `repo`
 - Keep the subject under ~72 characters and write it in the imperative mood:
   - `cli: add archnaut init skeleton`
-  - `mcp-server: implement getarchitecture tool`
+  - `server: implement getarchitecture tool`
   - `docs: document storage model in PROJECT.md`
 - When applicable, reference issues: `web-ui: add node inspector panel (closes #42)`
 
