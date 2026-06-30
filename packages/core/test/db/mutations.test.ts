@@ -131,6 +131,29 @@ describe("db mutations", () => {
     db.close();
   });
 
+  it("patchNode replaces provided child collections", () => {
+    const db = seedDb();
+    patchNode(db, {
+      id: "cmp.api.checkout",
+      files: ["old/file.ts"],
+      tags: ["old-tag"],
+      tech: ["node"],
+    });
+    patchNode(db, {
+      id: "cmp.api.checkout",
+      files: ["src/new.ts"],
+      tags: ["new-tag"],
+      tech: ["bun"],
+    });
+
+    const snapshot = getArchitectureSnapshot(db);
+    const node = snapshot.nodes.find((n) => n.id === "cmp.api.checkout");
+    expect(node?.files).toEqual(["src/new.ts"]);
+    expect(node?.tags).toEqual(["new-tag"]);
+    expect(node?.tech).toEqual(["bun"]);
+    db.close();
+  });
+
   it("patchNode removes description when description is null", () => {
     const db = seedDb();
     patchNode(db, { id: "cmp.api.checkout", description: "has desc" });
