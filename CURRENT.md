@@ -10,6 +10,7 @@
 - **pnpm monorepo** root with `pnpm-workspace.yaml` and `.npmrc` (`allow-build=better-sqlite3`)
 
 ### `packages/core` (`@archnaut/core`) — full v0.1 domain layer
+
 - Zod schemas + inferred TypeScript types for `archnaut.json` v1
 - Collect-all validation with cross-field checks
 - Deterministic normalization + stable JSON serialization
@@ -21,6 +22,7 @@
 - 50 vitest tests passing; `pnpm build` succeeds
 
 ### `packages/server` (`@archnaut/server`) — runtime store + HTTP + MCP read/write tools
+
 - `createStore(archJsonPath, options?)` → opens SQLite at `.archnaut/db.sqlite` (or `:memory:` in tests), migrates schema, hydrates from `archnaut.json` if present
 - `createHttpServer(store)` / `startServer(store, port)` — single-port Node `http` server
 - `GET /health` → `{ ok: true, uptime: number }`
