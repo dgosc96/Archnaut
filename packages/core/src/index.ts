@@ -75,6 +75,7 @@ export {
 } from "./repository/archnaut-repository.js";
 
 // DB projection
+export { EmptyArchitectureError } from "./db/errors.js";
 export { migrateDb, clearDb, clearNodesAndEdges } from "./db/migrate.js";
 export { initDbFromFile } from "./db/init-from-file.js";
 export { rebuildDbFromFile } from "./db/rebuild-from-file.js";

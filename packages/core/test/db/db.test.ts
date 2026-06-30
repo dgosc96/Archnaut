@@ -5,6 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { EmptyArchitectureError } from "../../src/db/errors.js";
 import { getArchitectureSnapshot } from "../../src/db/queries.js";
 import { initDbFromFile } from "../../src/db/init-from-file.js";
 import { migrateDb, clearDb, clearNodesAndEdges } from "../../src/db/migrate.js";
@@ -26,6 +27,13 @@ async function makeTempDir(): Promise<string> {
 }
 
 describe("SQLite projection", () => {
+  it("getArchitectureSnapshot throws EmptyArchitectureError on empty projection", () => {
+    const db = new Database(":memory:");
+    migrateDb(db);
+    expect(() => getArchitectureSnapshot(db)).toThrow(EmptyArchitectureError);
+    db.close();
+  });
+
   it("round-trips file → db → snapshot", () => {
     const db = new Database(":memory:");
     migrateDb(db);

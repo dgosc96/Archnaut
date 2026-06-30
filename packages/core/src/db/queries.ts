@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 
+import { EmptyArchitectureError } from "./errors.js";
 import { ARCHNAUT_FILE_VERSION, type ArchnautFileV1 } from "../schema/archnaut-file.js";
 import type { Concern } from "../schema/concern.js";
 import type { Edge } from "../schema/edge.js";
@@ -17,7 +18,7 @@ import type { Workspace } from "../schema/workspace.js";
  * @remarks Intended for tests and dogfooding — not the production read path, which reads
  * `archnaut.json` directly. Ordering matches normalized file conventions (sorted by id).
  *
- * @throws When the database has no project row (empty or uninitialized projection).
+ * @throws {@link EmptyArchitectureError} When the database has no project row (empty or uninitialized projection).
  */
 export function getArchitectureSnapshot(db: Database.Database): ArchnautFileV1 {
   const projectRow = db
@@ -33,7 +34,7 @@ export function getArchitectureSnapshot(db: Database.Database): ArchnautFileV1 {
     | undefined;
 
   if (!projectRow) {
-    throw new Error("Database has no project row");
+    throw new EmptyArchitectureError();
   }
 
   const project: Project = {

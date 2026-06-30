@@ -1,10 +1,12 @@
-import { readArchitectureSnapshot, type ArchnautFileV1 } from "@archnaut/core";
+import {
+  EmptyArchitectureError,
+  readArchitectureSnapshot,
+  type ArchnautFileV1,
+} from "@archnaut/core";
 
 import type { Store } from "../store.js";
 
 export type SnapshotResult = ArchnautFileV1 | { isError: true; message: string };
-
-const EMPTY_ARCHITECTURE_ERROR = "Database has no project row";
 
 /**
  * Read the architecture snapshot, mapping empty DB to a user-facing error.
@@ -16,7 +18,7 @@ export async function tryGetSnapshot(store: Store): Promise<SnapshotResult> {
   try {
     return await readArchitectureSnapshot(store.getDb());
   } catch (error) {
-    if (error instanceof Error && error.message === EMPTY_ARCHITECTURE_ERROR) {
+    if (error instanceof EmptyArchitectureError) {
       return {
         isError: true,
         message:
