@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import type { Statement } from "better-sqlite3";
 
 /** Child row collections attached to a node. */
 export type NodeChildrenInput = {
@@ -6,6 +7,29 @@ export type NodeChildrenInput = {
   tags?: string[];
   tech?: string[];
 };
+
+/** Pre-prepared INSERT statements for node child tables. */
+export type NodeChildrenInsertStatements = {
+  insertFile: Statement;
+  insertTag: Statement;
+  insertTech: Statement;
+};
+
+/**
+ * Prepare INSERT statements for node child tables (files, tags, tech).
+ *
+ * @param db - Open better-sqlite3 database handle.
+ * @returns Reusable prepared statements for bulk or repeated inserts.
+ */
+export function prepareNodeChildrenInserts(db: Database.Database): NodeChildrenInsertStatements {
+  return {
+    insertFile: db.prepare(
+      `INSERT INTO node_files (node_id, path, ord) VALUES (?, ?, ?)`,
+    ),
+    insertTag: db.prepare(`INSERT INTO node_tags (node_id, tag) VALUES (?, ?)`),
+    insertTech: db.prepare(`INSERT INTO node_tech (node_id, tech) VALUES (?, ?)`),
+  };
+}
 
 /**
  * Delete all child rows (files, tags, tech) for a node.
@@ -20,30 +44,24 @@ export function deleteNodeChildren(db: Database.Database, nodeId: string): void 
 }
 
 /**
- * Insert files, tags, and tech rows for a node.
+ * Insert files, tags, and tech rows for a node using pre-prepared statements.
  *
- * @param db - Open better-sqlite3 database handle.
+ * @param stmts - Prepared INSERT statements from {@link prepareNodeChildrenInserts}.
  * @param nodeId - Parent node ID.
  * @param children - Child collections to insert; omitted arrays are skipped.
  */
 export function insertNodeChildren(
-  db: Database.Database,
+  stmts: NodeChildrenInsertStatements,
   nodeId: string,
   children: NodeChildrenInput,
 ): void {
-  const insertFile = db.prepare(
-    `INSERT INTO node_files (node_id, path, ord) VALUES (?, ?, ?)`,
-  );
-  const insertTag = db.prepare(`INSERT INTO node_tags (node_id, tag) VALUES (?, ?)`);
-  const insertTech = db.prepare(`INSERT INTO node_tech (node_id, tech) VALUES (?, ?)`);
-
   children.files?.forEach((filePath, ord) => {
-    insertFile.run(nodeId, filePath, ord);
+    stmts.insertFile.run(nodeId, filePath, ord);
   });
   for (const tag of children.tags ?? []) {
-    insertTag.run(nodeId, tag);
+    stmts.insertTag.run(nodeId, tag);
   }
   for (const tech of children.tech ?? []) {
-    insertTech.run(nodeId, tech);
+    stmts.insertTech.run(nodeId, tech);
   }
 }

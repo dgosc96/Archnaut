@@ -9,7 +9,11 @@ import type {
   NodeLayer,
   NodeStatus,
 } from "../schema/enums.js";
-import { deleteNodeChildren, insertNodeChildren } from "./node-children.js";
+import {
+  deleteNodeChildren,
+  insertNodeChildren,
+  prepareNodeChildrenInserts,
+} from "./node-children.js";
 
 /** Input for full node upsert (replace child rows). */
 export type UpsertNodeInput = {
@@ -116,7 +120,8 @@ export function upsertNode(db: Database.Database, input: UpsertNodeInput): void 
       input.layer ?? null,
       metadataJson,
     );
-    insertNodeChildren(db, input.id, {
+    const childInserts = prepareNodeChildrenInserts(db);
+    insertNodeChildren(childInserts, input.id, {
       files: input.files,
       tags: input.tags,
       tech: input.tech,
@@ -192,17 +197,18 @@ export function patchNode(db: Database.Database, input: PatchNodeInput): void {
 
   const run = db.transaction(() => {
     updateNode.run(name, status, layer, metadataJson, input.id);
+    const childInserts = prepareNodeChildrenInserts(db);
     if (input.files !== undefined) {
       deleteFiles.run(input.id);
-      insertNodeChildren(db, input.id, { files: input.files });
+      insertNodeChildren(childInserts, input.id, { files: input.files });
     }
     if (input.tags !== undefined) {
       deleteTags.run(input.id);
-      insertNodeChildren(db, input.id, { tags: input.tags });
+      insertNodeChildren(childInserts, input.id, { tags: input.tags });
     }
     if (input.tech !== undefined) {
       deleteTech.run(input.id);
-      insertNodeChildren(db, input.id, { tech: input.tech });
+      insertNodeChildren(childInserts, input.id, { tech: input.tech });
     }
   });
 
