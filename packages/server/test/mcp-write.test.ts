@@ -544,9 +544,11 @@ describe("MCP write tools", () => {
       kind: "database",
       status: "planned",
     });
+    expect(res.status).toBe(200);
+
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
     const { isError } = parseToolResult(body);
-    expect(isError || res.status === 500).toBe(true);
+    expect(isError).toBe(true);
 
     await expectStoreUnchanged(store, before, jsonBefore);
   });
