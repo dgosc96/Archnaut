@@ -102,12 +102,20 @@ describe("SQLite projection", () => {
     expect(project.c).toBe(1);
     expect(workspaces.c).toBe(normalized.workspaces.length);
 
+    const nodeFiles = db.prepare(`SELECT COUNT(*) AS c FROM node_files`).get() as { c: number };
+    const nodeTags = db.prepare(`SELECT COUNT(*) AS c FROM node_tags`).get() as { c: number };
+    const nodeTech = db.prepare(`SELECT COUNT(*) AS c FROM node_tech`).get() as { c: number };
+    expect(nodeFiles.c).toBe(0);
+    expect(nodeTags.c).toBe(0);
+    expect(nodeTech.c).toBe(0);
+
     const snapshot = getArchitectureSnapshot(db);
     expect(snapshot.project.id).toBe(normalized.project.id);
     expect(snapshot.workspaces).toEqual(normalized.workspaces);
     expect(snapshot.nodes).toHaveLength(0);
     expect(snapshot.edges).toHaveLength(0);
     expect(snapshot.concerns).toHaveLength(0);
+    expect(snapshot.meta).toEqual(normalized.meta);
     db.close();
   });
 });
