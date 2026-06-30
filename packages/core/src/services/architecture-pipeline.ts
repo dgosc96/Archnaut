@@ -1,9 +1,13 @@
 import type Database from "better-sqlite3";
+import path from "node:path";
 
+import { createBootstrapArchitecture } from "../bootstrap/create-bootstrap-architecture.js";
 import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
 import { normalizeArchnautFile } from "../normalize/normalize-archnaut-file.js";
 import { loadArchnautFile } from "../repository/load.js";
 import { saveArchnautFile } from "../repository/save.js";
+import { EmptyArchitectureError } from "../db/errors.js";
+import { clearDb } from "../db/migrate.js";
 import { initDbFromFile } from "../db/init-from-file.js";
 import {
   insertConcern,
@@ -30,6 +34,34 @@ function withMutationLock<T>(fn: () => Promise<T>): Promise<T> {
   const next = mutationChain.then(fn, fn);
   mutationChain = next.then(() => undefined, () => undefined);
   return next;
+}
+
+function tryGetSnapshot(db: Database.Database): ArchnautFileV1 | null {
+  try {
+    return getArchitectureSnapshot(db);
+  } catch (error) {
+    if (error instanceof EmptyArchitectureError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function ensureBootstrapProject(db: Database.Database, archPath: string): void {
+  const row = db.prepare(`SELECT 1 FROM project LIMIT 1`).get();
+  if (row !== undefined) {
+    return;
+  }
+  const projectRoot = path.dirname(archPath);
+  initDbFromFile(createBootstrapArchitecture(projectRoot), db);
+}
+
+function rollbackDb(db: Database.Database, before: ArchnautFileV1 | null): void {
+  if (before === null) {
+    clearDb(db);
+    return;
+  }
+  initDbFromFile(before, db);
 }
 
 /**
@@ -100,11 +132,15 @@ export async function applyArchitectureMutation(
   mutate: () => void,
 ): Promise<void> {
   return withMutationLock(async () => {
-    const before = getArchitectureSnapshot(db);
+    let before = tryGetSnapshot(db);
+    if (before === null) {
+      ensureBootstrapProject(db, path);
+      before = getArchitectureSnapshot(db);
+    }
     try {
       mutate();
     } catch (error) {
-      initDbFromFile(before, db);
+      rollbackDb(db, before);
       throw error;
     }
     const after = getArchitectureSnapshot(db);
@@ -112,7 +148,7 @@ export async function applyArchitectureMutation(
       await persistArchitecture(path, after, db);
     } catch (error) {
       try {
-        initDbFromFile(before, db);
+        rollbackDb(db, before);
       } catch {
         // best-effort DB rollback; original error takes precedence
       }

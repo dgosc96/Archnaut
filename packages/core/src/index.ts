@@ -74,6 +74,9 @@ export {
   type ArchnautRepositoryOptions,
 } from "./repository/archnaut-repository.js";
 
+// Bootstrap
+export { createBootstrapArchitecture } from "./bootstrap/create-bootstrap-architecture.js";
+
 // DB projection
 export { EmptyArchitectureError } from "./db/errors.js";
 export { migrateDb, clearDb, clearNodesAndEdges } from "./db/migrate.js";

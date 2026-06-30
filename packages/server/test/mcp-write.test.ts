@@ -114,6 +114,43 @@ function parseToolResult<T>(body: {
 }
 
 describe("MCP write tools", () => {
+  it("bootstrap write tools work on fresh store without archnaut.json", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const clearRes = await callTool(port, "cleararchitecture");
+    expect(clearRes.status).toBe(200);
+    const clearBody = (await clearRes.json()) as Parameters<typeof parseToolResult>[0];
+    const clearResult = parseToolResult<{ cleared: boolean }>(clearBody);
+    expect(clearResult.isError).toBe(false);
+    expect(clearResult.parsed?.cleared).toBe(true);
+
+    const addRes = await callTool(port, "addnode", {
+      id: "cmp.api",
+      name: "API",
+      kind: "component",
+      status: "implemented",
+      files: ["src/api.ts"],
+    });
+    expect(addRes.status).toBe(200);
+    const addBody = (await addRes.json()) as Parameters<typeof parseToolResult>[0];
+    const addResult = parseToolResult<{ id: string; upserted: boolean }>(addBody);
+    expect(addResult.isError).toBe(false);
+    expect(addResult.parsed?.upserted).toBe(true);
+
+    const archRes = await callTool(port, "getarchitecture");
+    const archBody = (await archRes.json()) as Parameters<typeof parseToolResult>[0];
+    const archResult = parseToolResult<ArchnautFileV1>(archBody);
+    expect(archResult.isError).toBe(false);
+    expect(archResult.parsed?.nodes).toHaveLength(1);
+    expect(archResult.parsed?.nodes[0]?.id).toBe("cmp.api");
+
+    const file = JSON.parse(await readFile(store.getArchJsonPath(), "utf8")) as ArchnautFileV1;
+    expect(file.nodes).toHaveLength(1);
+    expect(file.project.id).toMatch(/^repo\./);
+  });
+
   it("cleararchitecture returns { cleared: true } on seeded store", async () => {
     store = await makeStore();
     seedStore(store);

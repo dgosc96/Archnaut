@@ -187,4 +187,56 @@ describe("architecture pipeline", () => {
     expect(snapshot).toEqual(before);
     db.close();
   });
+
+  it("applyArchitectureMutation on empty DB bootstraps project and persists first node", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await applyArchitectureMutation(filePath, db, () => {
+      upsertNode(db, {
+        id: "cmp.api",
+        name: "API",
+        kind: "component",
+        status: "implemented",
+        files: ["src/api.ts"],
+      });
+    });
+
+    const snapshot = getArchitectureSnapshot(db);
+    expect(snapshot.project.id).toMatch(/^repo\./);
+    expect(snapshot.nodes).toHaveLength(1);
+    expect(snapshot.nodes[0]?.id).toBe("cmp.api");
+
+    const file = JSON.parse(await readFile(filePath, "utf8")) as { nodes: Array<{ id: string }> };
+    expect(file.nodes).toHaveLength(1);
+    expect(file.nodes[0]?.id).toBe("cmp.api");
+    db.close();
+  });
+
+  it("applyArchitectureMutation rolls back to bootstrap scaffold when mutate throws on empty DB", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, {
+          id: "cmp.canary",
+          name: "Canary",
+          kind: "component",
+          status: "planned",
+          files: [],
+        });
+        throw new Error("mutate failed");
+      }),
+    ).rejects.toThrow("mutate failed");
+
+    const snapshot = getArchitectureSnapshot(db);
+    expect(snapshot.project.id).toMatch(/^repo\./);
+    expect(snapshot.nodes).toHaveLength(0);
+    db.close();
+  });
 });
