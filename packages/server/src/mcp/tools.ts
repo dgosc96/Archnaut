@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import {
   applyArchitectureMutation,
+  applyInsertConcern,
+  applyPatchNode,
+  applyUpsertEdge,
+  applyUpsertNode,
   clearNodesAndEdges,
   generateConcernId,
-  insertConcern,
   nodeExists,
-  patchNode,
-  upsertEdge,
-  upsertNode,
   workspaceExists,
 } from "@archnaut/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -35,7 +35,7 @@ export function createMcpServer(store: Store): McpServer {
       inputSchema: {},
     },
     async () => {
-      const snapshot = tryGetSnapshot(store);
+      const snapshot = await tryGetSnapshot(store);
       if ("isError" in snapshot) {
         return errorResult(snapshot.message);
       }
@@ -52,7 +52,7 @@ export function createMcpServer(store: Store): McpServer {
       },
     },
     async ({ id }) => {
-      const snapshot = tryGetSnapshot(store);
+      const snapshot = await tryGetSnapshot(store);
       if ("isError" in snapshot) {
         return errorResult(snapshot.message);
       }
@@ -76,7 +76,7 @@ export function createMcpServer(store: Store): McpServer {
       inputSchema: {},
     },
     async () => {
-      const snapshot = tryGetSnapshot(store);
+      const snapshot = await tryGetSnapshot(store);
       if ("isError" in snapshot) {
         return errorResult(snapshot.message);
       }
@@ -129,19 +129,17 @@ export function createMcpServer(store: Store): McpServer {
         return errorResult(`Workspace '${input.workspaceId}' not found.`);
       }
 
-      await applyArchitectureMutation(archPath, db, () => {
-        upsertNode(db, {
-          id: input.id,
-          name: input.name,
-          kind: input.kind,
-          status: input.status,
-          files: input.files,
-          workspaceId: input.workspaceId,
-          layer: input.layer,
-          tags: input.tags,
-          tech: input.tech,
-          description: input.description,
-        });
+      await applyUpsertNode(archPath, db, {
+        id: input.id,
+        name: input.name,
+        kind: input.kind,
+        status: input.status,
+        files: input.files,
+        workspaceId: input.workspaceId,
+        layer: input.layer,
+        tags: input.tags,
+        tech: input.tech,
+        description: input.description,
       });
       return jsonResult({ id: input.id, upserted: true });
     },
@@ -176,15 +174,13 @@ export function createMcpServer(store: Store): McpServer {
         return errorResult(`Node '${input.to}' not found.`);
       }
 
-      await applyArchitectureMutation(archPath, db, () => {
-        upsertEdge(db, {
-          id: input.id,
-          from: input.from,
-          to: input.to,
-          type: input.type,
-          status: input.status,
-          description: input.description,
-        });
+      await applyUpsertEdge(archPath, db, {
+        id: input.id,
+        from: input.from,
+        to: input.to,
+        type: input.type,
+        status: input.status,
+        description: input.description,
       });
       return jsonResult({ id: input.id, upserted: true });
     },
@@ -211,17 +207,15 @@ export function createMcpServer(store: Store): McpServer {
         return errorResult(`Node '${input.id}' not found.`);
       }
 
-      await applyArchitectureMutation(archPath, db, () => {
-        patchNode(db, {
-          id: input.id,
-          name: input.name,
-          status: input.status,
-          layer: input.layer,
-          files: input.files,
-          tags: input.tags,
-          tech: input.tech,
-          description: input.description,
-        });
+      await applyPatchNode(archPath, db, {
+        id: input.id,
+        name: input.name,
+        status: input.status,
+        layer: input.layer,
+        files: input.files,
+        tags: input.tags,
+        tech: input.tech,
+        description: input.description,
       });
       return jsonResult({ id: input.id, updated: true });
     },
@@ -245,14 +239,12 @@ export function createMcpServer(store: Store): McpServer {
       }
 
       const id = generateConcernId(randomUUID());
-      await applyArchitectureMutation(archPath, db, () => {
-        insertConcern(db, {
-          id,
-          scope: input.scope,
-          severity: input.severity,
-          source: input.source,
-          description: input.description,
-        });
+      await applyInsertConcern(archPath, db, {
+        id,
+        scope: input.scope,
+        severity: input.severity,
+        source: input.source,
+        description: input.description,
       });
       return jsonResult({ id, created: true });
     },

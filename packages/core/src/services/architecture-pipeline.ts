@@ -5,7 +5,24 @@ import { normalizeArchnautFile } from "../normalize/normalize-archnaut-file.js";
 import { loadArchnautFile } from "../repository/load.js";
 import { saveArchnautFile } from "../repository/save.js";
 import { initDbFromFile } from "../db/init-from-file.js";
+import {
+  insertConcern,
+  patchNode,
+  upsertEdge,
+  upsertNode,
+  type InsertConcernInput,
+  type PatchNodeInput,
+  type UpsertEdgeInput,
+  type UpsertNodeInput,
+} from "../db/mutations.js";
 import { getArchitectureSnapshot } from "../db/queries.js";
+
+export type {
+  InsertConcernInput,
+  PatchNodeInput,
+  UpsertEdgeInput,
+  UpsertNodeInput,
+} from "../db/mutations.js";
 
 let mutationChain: Promise<void> = Promise.resolve();
 
@@ -13,6 +30,16 @@ function withMutationLock<T>(fn: () => Promise<T>): Promise<T> {
   const next = mutationChain.then(fn, fn);
   mutationChain = next.then(() => undefined, () => undefined);
   return next;
+}
+
+/**
+ * Read the architecture snapshot under the same lock used by mutations.
+ *
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @returns Committed architecture state; waits for in-flight mutations to finish.
+ */
+export function readArchitectureSnapshot(db: Database.Database): Promise<ArchnautFileV1> {
+  return withMutationLock(async () => getArchitectureSnapshot(db));
 }
 
 /**
@@ -97,4 +124,72 @@ export async function applyArchitectureMutation(
       throw error;
     }
   });
+}
+
+/**
+ * Upsert a node and persist the result to `archnaut.json`.
+ *
+ * @param path - Target path for the canonical architecture file.
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param input - Full node fields to upsert.
+ * @returns Resolves when the mutation and persist complete successfully.
+ * @throws When the upsert fails or persistence fails; rolls back per {@link applyArchitectureMutation}.
+ */
+export async function applyUpsertNode(
+  path: string,
+  db: Database.Database,
+  input: UpsertNodeInput,
+): Promise<void> {
+  return applyArchitectureMutation(path, db, () => upsertNode(db, input));
+}
+
+/**
+ * Upsert an edge and persist the result to `archnaut.json`.
+ *
+ * @param path - Target path for the canonical architecture file.
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param input - Full edge fields to upsert.
+ * @returns Resolves when the mutation and persist complete successfully.
+ * @throws When the upsert fails or persistence fails; rolls back per {@link applyArchitectureMutation}.
+ */
+export async function applyUpsertEdge(
+  path: string,
+  db: Database.Database,
+  input: UpsertEdgeInput,
+): Promise<void> {
+  return applyArchitectureMutation(path, db, () => upsertEdge(db, input));
+}
+
+/**
+ * Patch an existing node and persist the result to `archnaut.json`.
+ *
+ * @param path - Target path for the canonical architecture file.
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param input - Partial node fields to update.
+ * @returns Resolves when the mutation and persist complete successfully.
+ * @throws When the patch fails or persistence fails; rolls back per {@link applyArchitectureMutation}.
+ */
+export async function applyPatchNode(
+  path: string,
+  db: Database.Database,
+  input: PatchNodeInput,
+): Promise<void> {
+  return applyArchitectureMutation(path, db, () => patchNode(db, input));
+}
+
+/**
+ * Insert a concern and persist the result to `archnaut.json`.
+ *
+ * @param path - Target path for the canonical architecture file.
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param input - Concern fields to insert.
+ * @returns Resolves when the mutation and persist complete successfully.
+ * @throws When the insert fails or persistence fails; rolls back per {@link applyArchitectureMutation}.
+ */
+export async function applyInsertConcern(
+  path: string,
+  db: Database.Database,
+  input: InsertConcernInput,
+): Promise<void> {
+  return applyArchitectureMutation(path, db, () => insertConcern(db, input));
 }

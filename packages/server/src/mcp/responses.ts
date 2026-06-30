@@ -1,4 +1,4 @@
-import { getArchitectureSnapshot, type ArchnautFileV1 } from "@archnaut/core";
+import { readArchitectureSnapshot, type ArchnautFileV1 } from "@archnaut/core";
 
 import type { Store } from "../store.js";
 
@@ -12,9 +12,9 @@ const EMPTY_ARCHITECTURE_ERROR = "Database has no project row";
  * @param store - Runtime store for SQLite projection access.
  * @returns Architecture file or structured error for MCP tools.
  */
-export function tryGetSnapshot(store: Store): SnapshotResult {
+export async function tryGetSnapshot(store: Store): Promise<SnapshotResult> {
   try {
-    return getArchitectureSnapshot(store.getDb());
+    return await readArchitectureSnapshot(store.getDb());
   } catch (error) {
     if (error instanceof Error && error.message === EMPTY_ARCHITECTURE_ERROR) {
       return {
