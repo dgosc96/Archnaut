@@ -2,20 +2,55 @@ import { randomUUID } from "node:crypto";
 
 import {
   applyArchitectureMutation,
-  applyInsertConcern,
-  applyPatchNode,
-  applyUpsertEdge,
-  applyUpsertNode,
   clearNodesAndEdges,
   generateConcernId,
+  insertConcern,
   nodeExists,
+  patchNode,
+  upsertEdge,
+  upsertNode,
   workspaceExists,
 } from "@archnaut/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type Database from "better-sqlite3";
 import { z } from "zod";
 
 import type { Store } from "../store.js";
 import { errorResult, jsonResult, tryGetSnapshot } from "./responses.js";
+
+class NodeNotFoundError extends Error {
+  constructor(nodeId: string) {
+    super(`Node '${nodeId}' not found.`);
+    this.name = "NodeNotFoundError";
+  }
+}
+
+class WorkspaceNotFoundError extends Error {
+  constructor(workspaceId: string) {
+    super(`Workspace '${workspaceId}' not found.`);
+    this.name = "WorkspaceNotFoundError";
+  }
+}
+
+async function runValidatedMutation(
+  archPath: string,
+  db: Database.Database,
+  validate: () => void,
+  mutate: () => void,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    await applyArchitectureMutation(archPath, db, () => {
+      validate();
+      mutate();
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof NodeNotFoundError || error instanceof WorkspaceNotFoundError) {
+      return { ok: false, message: error.message };
+    }
+    throw error;
+  }
+}
 
 const READ_TOOL_ANNOTATIONS = {
   readOnlyHint: true,
@@ -158,22 +193,29 @@ export function createMcpServer(store: Store): McpServer {
       annotations: UPSERT_TOOL_ANNOTATIONS,
     },
     async (input) => {
-      if (input.workspaceId !== undefined && !workspaceExists(db, input.workspaceId)) {
-        return errorResult(`Workspace '${input.workspaceId}' not found.`);
-      }
-
-      await applyUpsertNode(archPath, db, {
-        id: input.id,
-        name: input.name,
-        kind: input.kind,
-        status: input.status,
-        files: input.files,
-        workspaceId: input.workspaceId,
-        layer: input.layer,
-        tags: input.tags,
-        tech: input.tech,
-        description: input.description,
-      });
+      const result = await runValidatedMutation(
+        archPath,
+        db,
+        () => {
+          if (input.workspaceId !== undefined && !workspaceExists(db, input.workspaceId)) {
+            throw new WorkspaceNotFoundError(input.workspaceId);
+          }
+        },
+        () =>
+          upsertNode(db, {
+            id: input.id,
+            name: input.name,
+            kind: input.kind,
+            status: input.status,
+            files: input.files,
+            workspaceId: input.workspaceId,
+            layer: input.layer,
+            tags: input.tags,
+            tech: input.tech,
+            description: input.description,
+          }),
+      );
+      if (!result.ok) return errorResult(result.message);
       return jsonResult({ id: input.id, upserted: true });
     },
   );
@@ -201,21 +243,24 @@ export function createMcpServer(store: Store): McpServer {
       annotations: UPSERT_TOOL_ANNOTATIONS,
     },
     async (input) => {
-      if (!nodeExists(db, input.from)) {
-        return errorResult(`Node '${input.from}' not found.`);
-      }
-      if (!nodeExists(db, input.to)) {
-        return errorResult(`Node '${input.to}' not found.`);
-      }
-
-      await applyUpsertEdge(archPath, db, {
-        id: input.id,
-        from: input.from,
-        to: input.to,
-        type: input.type,
-        status: input.status,
-        description: input.description,
-      });
+      const result = await runValidatedMutation(
+        archPath,
+        db,
+        () => {
+          if (!nodeExists(db, input.from)) throw new NodeNotFoundError(input.from);
+          if (!nodeExists(db, input.to)) throw new NodeNotFoundError(input.to);
+        },
+        () =>
+          upsertEdge(db, {
+            id: input.id,
+            from: input.from,
+            to: input.to,
+            type: input.type,
+            status: input.status,
+            description: input.description,
+          }),
+      );
+      if (!result.ok) return errorResult(result.message);
       return jsonResult({ id: input.id, upserted: true });
     },
   );
@@ -238,20 +283,25 @@ export function createMcpServer(store: Store): McpServer {
       annotations: UPSERT_TOOL_ANNOTATIONS,
     },
     async (input) => {
-      if (!nodeExists(db, input.id)) {
-        return errorResult(`Node '${input.id}' not found.`);
-      }
-
-      await applyPatchNode(archPath, db, {
-        id: input.id,
-        name: input.name,
-        status: input.status,
-        layer: input.layer,
-        files: input.files,
-        tags: input.tags,
-        tech: input.tech,
-        description: input.description,
-      });
+      const result = await runValidatedMutation(
+        archPath,
+        db,
+        () => {
+          if (!nodeExists(db, input.id)) throw new NodeNotFoundError(input.id);
+        },
+        () =>
+          patchNode(db, {
+            id: input.id,
+            name: input.name,
+            status: input.status,
+            layer: input.layer,
+            files: input.files,
+            tags: input.tags,
+            tech: input.tech,
+            description: input.description,
+          }),
+      );
+      if (!result.ok) return errorResult(result.message);
       return jsonResult({ id: input.id, updated: true });
     },
   );
@@ -270,18 +320,23 @@ export function createMcpServer(store: Store): McpServer {
       annotations: FLAG_CONCERN_ANNOTATIONS,
     },
     async (input) => {
-      if (!nodeExists(db, input.scope)) {
-        return errorResult(`Node '${input.scope}' not found.`);
-      }
-
       const id = generateConcernId(randomUUID());
-      await applyInsertConcern(archPath, db, {
-        id,
-        scope: input.scope,
-        severity: input.severity,
-        source: input.source,
-        description: input.description,
-      });
+      const result = await runValidatedMutation(
+        archPath,
+        db,
+        () => {
+          if (!nodeExists(db, input.scope)) throw new NodeNotFoundError(input.scope);
+        },
+        () =>
+          insertConcern(db, {
+            id,
+            scope: input.scope,
+            severity: input.severity,
+            source: input.source,
+            description: input.description,
+          }),
+      );
+      if (!result.ok) return errorResult(result.message);
       return jsonResult({ id, created: true });
     },
   );
