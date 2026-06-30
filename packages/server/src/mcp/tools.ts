@@ -17,6 +17,34 @@ import { z } from "zod";
 import type { Store } from "../store.js";
 import { errorResult, jsonResult, tryGetSnapshot } from "./responses.js";
 
+const READ_TOOL_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const UPSERT_TOOL_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const CLEAR_ARCHITECTURE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const FLAG_CONCERN_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
 /**
  * Build the MCP server with architecture read and write tools.
  *
@@ -33,6 +61,7 @@ export function createMcpServer(store: Store): McpServer {
     {
       description: "Return the full architecture graph as structured JSON.",
       inputSchema: {},
+      annotations: READ_TOOL_ANNOTATIONS,
     },
     async () => {
       const snapshot = await tryGetSnapshot(store);
@@ -50,6 +79,7 @@ export function createMcpServer(store: Store): McpServer {
       inputSchema: {
         id: z.string().min(1).describe("Node ID (e.g. cmp.api.checkout)"),
       },
+      annotations: READ_TOOL_ANNOTATIONS,
     },
     async ({ id }) => {
       const snapshot = await tryGetSnapshot(store);
@@ -74,6 +104,7 @@ export function createMcpServer(store: Store): McpServer {
     {
       description: "Return all planned (not yet implemented) components and related edges.",
       inputSchema: {},
+      annotations: READ_TOOL_ANNOTATIONS,
     },
     async () => {
       const snapshot = await tryGetSnapshot(store);
@@ -97,6 +128,7 @@ export function createMcpServer(store: Store): McpServer {
       description:
         "Wipe the entire architecture projection. Call this before a full rescan so stale nodes and edges are not carried over.",
       inputSchema: {},
+      annotations: CLEAR_ARCHITECTURE_ANNOTATIONS,
     },
     async () => {
       await applyArchitectureMutation(archPath, db, () => {
@@ -123,6 +155,7 @@ export function createMcpServer(store: Store): McpServer {
         tech: z.array(z.string()).optional(),
         description: z.string().optional().describe("Goes into node.metadata.description"),
       },
+      annotations: UPSERT_TOOL_ANNOTATIONS,
     },
     async (input) => {
       if (input.workspaceId !== undefined && !workspaceExists(db, input.workspaceId)) {
@@ -165,6 +198,7 @@ export function createMcpServer(store: Store): McpServer {
         status: z.enum(["planned", "implemented"]),
         description: z.string().optional().describe("Goes into edge.metadata.description"),
       },
+      annotations: UPSERT_TOOL_ANNOTATIONS,
     },
     async (input) => {
       if (!nodeExists(db, input.from)) {
@@ -201,6 +235,7 @@ export function createMcpServer(store: Store): McpServer {
         tech: z.array(z.string()).optional(),
         description: z.string().optional().nullable(),
       },
+      annotations: UPSERT_TOOL_ANNOTATIONS,
     },
     async (input) => {
       if (!nodeExists(db, input.id)) {
@@ -232,6 +267,7 @@ export function createMcpServer(store: Store): McpServer {
         description: z.string().min(1),
         source: z.enum(["agent", "human"]).default("agent"),
       },
+      annotations: FLAG_CONCERN_ANNOTATIONS,
     },
     async (input) => {
       if (!nodeExists(db, input.scope)) {

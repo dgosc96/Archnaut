@@ -160,6 +160,19 @@ async function callTool(port: number, toolName: string, args: Record<string, unk
   });
 }
 
+async function listTools(port: number) {
+  return fetch(`http://127.0.0.1:${port}/api/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+      params: {},
+    }),
+  });
+}
+
 function parseToolResult<T>(body: {
   result?: { content?: Array<{ text?: string }>; isError?: boolean };
 }): { parsed: T | null; isError: boolean; text: string } {
@@ -178,6 +191,31 @@ function parseToolResult<T>(body: {
     text,
   };
 }
+
+describe("MCP tool annotations", () => {
+  it("tools/list exposes read-only and destructive hints", async () => {
+    store = await makeStore();
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const res = await listTools(port);
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      result?: {
+        tools?: Array<{
+          name: string;
+          annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+        }>;
+      };
+    };
+    const tools = body.result?.tools ?? [];
+    const getArch = tools.find((t) => t.name === "getarchitecture");
+    const clearArch = tools.find((t) => t.name === "cleararchitecture");
+    expect(getArch?.annotations?.readOnlyHint).toBe(true);
+    expect(clearArch?.annotations?.destructiveHint).toBe(true);
+  });
+});
 
 describe("MCP read tools", () => {
   it("getarchitecture returns HTTP 200 on unseeded store", async () => {
