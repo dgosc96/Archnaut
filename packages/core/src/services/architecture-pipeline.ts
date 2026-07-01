@@ -1,11 +1,12 @@
 import type Database from "better-sqlite3";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 
 import { createBootstrapArchitecture } from "../bootstrap/create-bootstrap-architecture.js";
 import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
 import { normalizeArchnautFile } from "../normalize/normalize-archnaut-file.js";
 import { loadArchnautFile } from "../repository/load.js";
-import { saveArchnautFile } from "../repository/save.js";
+import { restoreArchnautFile, saveArchnautFile } from "../repository/save.js";
 import { EmptyArchitectureError } from "../db/errors.js";
 import { clearDb } from "../db/migrate.js";
 import { initDbFromFile } from "../db/init-from-file.js";
@@ -64,10 +65,22 @@ function rollbackDb(db: Database.Database, before: ArchnautFileV1 | null): void 
   initDbFromFile(before, db);
 }
 
+async function tryReadFileBytes(archPath: string): Promise<string | null> {
+  try {
+    return await readFile(archPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function bestEffortRollbackToBefore(
   db: Database.Database,
   archPath: string,
   before: ArchnautFileV1,
+  fileBefore: string | null,
 ): Promise<void> {
   try {
     rollbackDb(db, before);
@@ -75,7 +88,11 @@ async function bestEffortRollbackToBefore(
     // best-effort DB rollback; original error takes precedence
   }
   try {
-    await saveArchnautFile(archPath, before, { normalize: false });
+    if (fileBefore !== null) {
+      await restoreArchnautFile(archPath, fileBefore);
+    } else {
+      await saveArchnautFile(archPath, before, { normalize: false });
+    }
   } catch {
     // best-effort file rollback; original error takes precedence
   }
@@ -150,28 +167,30 @@ export async function applyArchitectureMutation(
 ): Promise<void> {
   return withMutationLock(async () => {
     let before = tryGetSnapshot(db);
+    let fileBefore = await tryReadFileBytes(path);
     if (before === null) {
       ensureBootstrapProject(db, path);
       before = getArchitectureSnapshot(db);
       await persistArchitecture(path, before);
+      fileBefore = await readFile(path, "utf8");
     }
     try {
       mutate();
     } catch (error) {
-      await bestEffortRollbackToBefore(db, path, before);
+      await bestEffortRollbackToBefore(db, path, before, fileBefore);
       throw error;
     }
     let after: ArchnautFileV1;
     try {
       after = getArchitectureSnapshot(db);
     } catch (error) {
-      await bestEffortRollbackToBefore(db, path, before);
+      await bestEffortRollbackToBefore(db, path, before, fileBefore);
       throw error;
     }
     try {
       await persistArchitecture(path, after, db);
     } catch (error) {
-      await bestEffortRollbackToBefore(db, path, before);
+      await bestEffortRollbackToBefore(db, path, before, fileBefore);
       throw error;
     }
   });

@@ -313,4 +313,34 @@ describe("architecture pipeline", () => {
 
     db.close();
   });
+
+  it("applyArchitectureMutation restores exact file bytes when DB meta lags normalized file", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+    const before = getArchitectureSnapshot(db);
+    await saveArchnautFile(filePath, before);
+    const jsonBefore = await readFile(filePath, "utf8");
+    expect(jsonBefore).toMatch(/lastNormalizedAt/);
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, {
+          id: "cmp.canary",
+          name: "Canary",
+          kind: "component",
+          status: "planned",
+          files: [],
+        });
+        throw new Error("mutate failed");
+      }),
+    ).rejects.toThrow("mutate failed");
+
+    expect(getArchitectureSnapshot(db)).toEqual(before);
+    expect(await readFile(filePath, "utf8")).toBe(jsonBefore);
+    db.close();
+  });
 });

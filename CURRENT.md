@@ -18,10 +18,10 @@
 - Atomic `archnaut.json` repository (load/save)
 - SQLite projection (`migrateDb`, `initDbFromFile`, `rebuildDbFromFile`, `getArchitectureSnapshot`, `clearNodesAndEdges`)
 - DB mutation primitives (`upsertNode`, `upsertEdge`, `patchNode`, `insertConcern`, existence checks)
-- `loadValidateNormalize` / `persistArchitecture` / `applyArchitectureMutation` pipeline service (serialized mutations with DB + file rollback)
+- `loadValidateNormalize` / `persistArchitecture` / `applyArchitectureMutation` pipeline service (serialized mutations; bootstrap file persist on empty DB; DB rollback + byte-accurate file restore on failure)
 - `readArchitectureSnapshot` — reads under the same lock as mutations
 - `EmptyArchitectureError` — thrown when DB has no project row (empty/uninitialized projection)
-- 53 vitest tests passing; `pnpm build` succeeds
+- 58 vitest tests passing; `pnpm build` succeeds
 
 ### `packages/server` (`@archnaut/server`) — runtime store + HTTP + MCP read/write tools
 
@@ -44,7 +44,7 @@
 - DNS rebinding protection on `/api/mcp` (Host + Origin allowlist)
 - Request body hardening: 1 MiB size limit (413 Payload Too Large), empty body 400, malformed JSON 400
 - Structured error logging on MCP handler failures (TODO: wire to package logger)
-- 47 vitest tests passing (MCP read + write tools + DNS rebinding + HTTP regression); `pnpm build` succeeds
+- 48 vitest tests passing (MCP read + write tools + DNS rebinding + HTTP regression); `pnpm build` succeeds
 
 ## Not yet built
 

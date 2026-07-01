@@ -131,7 +131,7 @@ An embedded Model Context Protocol (MCP) server makes the architecture available
 Read tools:
 
 - `getarchitecture` — returns the full architecture graph as structured context
-- `getcomponentcontext(name)` — returns focused context for a single component
+- `getcomponentcontext(id)` — returns focused context for a single component
 - `getplannedfeatures` — returns all components marked as planned but not yet implemented
 
 Write tools used by the scanning agent and coding agents:

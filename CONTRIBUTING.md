@@ -48,12 +48,12 @@ Archnaut is a Node.js monorepo with pnpm workspaces.
 ### Initial setup
 
 ```sh
-# install dependencies
-pnpm install
+# install dependencies (matches CI)
+pnpm install --frozen-lockfile
 
 # verify workspaces
-pnpm -r --parallel --if-present run lint
-pnpm -r test --parallel --if-present
+pnpm lint
+pnpm test
 ```
 
 Target monorepo structure (packages are being bootstrapped — see `CURRENT.md`):
@@ -62,7 +62,7 @@ Target monorepo structure (packages are being bootstrapped — see `CURRENT.md`)
 /
   .cursor/
     rules/archnaut.mdc   # agent context for this repo (always applied)
-    mcp.json             # not yet — added once MCP server is ready for local use
+    mcp.json             # optional — dogfooding config (server is runnable; see CURRENT.md)
   packages/
     core/                # @archnaut/core — domain model, validation, SQLite projection
     server/              # @archnaut/server — HTTP, MCP, runtime store
@@ -80,7 +80,7 @@ Target monorepo structure (packages are being bootstrapped — see `CURRENT.md`)
   .gitignore
 ```
 
-> **Note:** `.cursor/mcp.json` is not in the repo yet. It will be added here once the MCP server can be run locally for dogfooding. End-user repos receive the same config from `archnaut init` via the rules engine.
+> **Note:** `.cursor/mcp.json` is not committed yet. `@archnaut/server` can be run in-process for local dogfooding (`createStore` + `startServer` on port 7070). End-user repos receive MCP config from `archnaut init` via the rules engine.
 
 ---
 

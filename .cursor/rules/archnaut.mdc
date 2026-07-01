@@ -101,7 +101,7 @@ IDs are assigned and preserved by the MCP server. Never generate IDs outside the
 
 **Read tools (implemented):**
 - `getarchitecture` — full architecture graph as structured context
-- `getcomponentcontext(name)` — focused context for a single component
+- `getcomponentcontext(id)` — focused context for a single component
 - `getplannedfeatures` — all components marked planned but not yet implemented
 
 **Write tools — implemented (agents call these — never direct file/DB writes):**

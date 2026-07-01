@@ -650,11 +650,11 @@ pnpm --filter @archnaut/core test:watch
 | `zod` | Schema definition and structural validation |
 | `better-sqlite3` | Embedded SQLite for runtime projection |
 
-`better-sqlite3` is a native addon. The root `package.json` lists it under `pnpm.onlyBuiltDependencies`, and `.npmrc` may set `allow-build=better-sqlite3`. Node.js >= 18 is required.
+`better-sqlite3` is a native addon. `pnpm-workspace.yaml` sets `allowBuilds: better-sqlite3: true`; `.npmrc` sets `allow-build=better-sqlite3`. Node.js >= 18 is required.
 
 ### Tests
 
-27 vitest tests cover validation, normalization, ID helpers, repository I/O, DB round-trip, and pipeline services. The `shop-platform` fixture is the canonical example architecture graph.
+58 vitest tests cover validation, normalization, ID helpers, repository I/O, DB round-trip, and pipeline services. The `shop-platform` fixture is the canonical example architecture graph.
 
 ---
 
@@ -662,7 +662,7 @@ pnpm --filter @archnaut/core test:watch
 
 | Concern | Where it belongs |
 |---|---|
-| HTTP server / MCP transport | `packages/server` (not yet built) |
+| HTTP server / MCP transport | `packages/server` (`@archnaut/server`) |
 | Daemon lifecycle (`start`/`stop`/`status`) | `packages/daemon` / `packages/cli` |
 | Web UI / diagram rendering | `packages/web-ui` |
 | File watching → WebSocket push | Server layer (Chokidar + `/ws`) |
