@@ -14,6 +14,7 @@ vi.mock("../../src/db/init-from-file.js", async () => {
 
 import { initDbFromFile } from "../../src/db/init-from-file.js";
 import { migrateDb } from "../../src/db/migrate.js";
+import * as queriesModule from "../../src/db/queries.js";
 import { getArchitectureSnapshot } from "../../src/db/queries.js";
 import { upsertNode } from "../../src/db/mutations.js";
 import {
@@ -30,6 +31,7 @@ const tempDirs: string[] = [];
 
 afterEach(async () => {
   vi.mocked(initDbFromFile).mockClear();
+  vi.restoreAllMocks();
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -237,6 +239,78 @@ describe("architecture pipeline", () => {
     const snapshot = getArchitectureSnapshot(db);
     expect(snapshot.project.id).toMatch(/^repo\./);
     expect(snapshot.nodes).toHaveLength(0);
+
+    const file = JSON.parse(await readFile(filePath, "utf8")) as {
+      nodes: unknown[];
+      project: { id: string };
+    };
+    expect(file.project.id).toMatch(/^repo\./);
+    expect(file.nodes).toHaveLength(0);
+    db.close();
+  });
+
+  it("applyArchitectureMutation rolls back DB when getArchitectureSnapshot throws after mutate", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+    const before = getArchitectureSnapshot(db);
+
+    const { getArchitectureSnapshot: realSnapshot } =
+      await vi.importActual<typeof queriesModule>("../../src/db/queries.js");
+
+    let snapshotCalls = 0;
+    vi.spyOn(queriesModule, "getArchitectureSnapshot").mockImplementation((database) => {
+      snapshotCalls += 1;
+      if (snapshotCalls === 2) {
+        throw new Error("snapshot failed");
+      }
+      return realSnapshot(database);
+    });
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, {
+          id: "cmp.extra",
+          name: "Extra",
+          kind: "component",
+          status: "planned",
+          files: [],
+        });
+      }),
+    ).rejects.toThrow("snapshot failed");
+
+    expect(getArchitectureSnapshot(db)).toEqual(before);
+    db.close();
+  });
+
+  it("applyArchitectureMutation preserves mutate error when rollbackDb throws", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+
+    vi.mocked(initDbFromFile).mockImplementationOnce(() => {
+      throw new Error("simulated DB rollback failure");
+    });
+
+    await expect(
+      applyArchitectureMutation(filePath, db, () => {
+        upsertNode(db, {
+          id: "cmp.canary",
+          name: "Canary",
+          kind: "component",
+          status: "planned",
+          files: [],
+        });
+        throw new Error("mutate failed");
+      }),
+    ).rejects.toThrow("mutate failed");
+
     db.close();
   });
 });

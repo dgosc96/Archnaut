@@ -64,6 +64,23 @@ function rollbackDb(db: Database.Database, before: ArchnautFileV1 | null): void 
   initDbFromFile(before, db);
 }
 
+async function bestEffortRollbackToBefore(
+  db: Database.Database,
+  archPath: string,
+  before: ArchnautFileV1,
+): Promise<void> {
+  try {
+    rollbackDb(db, before);
+  } catch {
+    // best-effort DB rollback; original error takes precedence
+  }
+  try {
+    await saveArchnautFile(archPath, before, { normalize: false });
+  } catch {
+    // best-effort file rollback; original error takes precedence
+  }
+}
+
 /**
  * Read the architecture snapshot under the same lock used by mutations.
  *
@@ -136,27 +153,25 @@ export async function applyArchitectureMutation(
     if (before === null) {
       ensureBootstrapProject(db, path);
       before = getArchitectureSnapshot(db);
+      await persistArchitecture(path, before);
     }
     try {
       mutate();
     } catch (error) {
-      rollbackDb(db, before);
+      await bestEffortRollbackToBefore(db, path, before);
       throw error;
     }
-    const after = getArchitectureSnapshot(db);
+    let after: ArchnautFileV1;
+    try {
+      after = getArchitectureSnapshot(db);
+    } catch (error) {
+      await bestEffortRollbackToBefore(db, path, before);
+      throw error;
+    }
     try {
       await persistArchitecture(path, after, db);
     } catch (error) {
-      try {
-        rollbackDb(db, before);
-      } catch {
-        // best-effort DB rollback; original error takes precedence
-      }
-      try {
-        await saveArchnautFile(path, before, { normalize: false });
-      } catch {
-        // best-effort file rollback; original error takes precedence
-      }
+      await bestEffortRollbackToBefore(db, path, before);
       throw error;
     }
   });
