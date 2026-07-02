@@ -293,6 +293,8 @@ describe("architecture pipeline", () => {
     migrateDb(db);
 
     await persistArchitecture(filePath, shopPlatformFixture, db);
+    const before = getArchitectureSnapshot(db);
+    const jsonBefore = await readFile(filePath, "utf8");
 
     vi.mocked(initDbFromFile).mockImplementationOnce(() => {
       throw new Error("simulated DB rollback failure");
@@ -311,6 +313,8 @@ describe("architecture pipeline", () => {
       }),
     ).rejects.toThrow("mutate failed");
 
+    expect(getArchitectureSnapshot(db)).not.toEqual(before);
+    expect(await readFile(filePath, "utf8")).toBe(jsonBefore);
     db.close();
   });
 
