@@ -30,6 +30,17 @@ export async function saveArchnautFile(
   const { normalize = true } = options;
   const normalized = normalize ? normalizeArchnautFile(file) : file;
   const content = serializeArchnautFile(normalized);
+  await restoreArchnautFile(filePath, content);
+}
+
+/**
+ * Atomically restore `archnaut.json` from pre-captured on-disk bytes.
+ *
+ * @param filePath - Target path for the canonical architecture file.
+ * @param content - Exact file body to write (e.g. captured before a failed mutation).
+ * @throws When the temp write or rename step fails (`ArchnautWriteError`).
+ */
+export async function restoreArchnautFile(filePath: string, content: string): Promise<void> {
   const tempPath = `${filePath}.tmp`;
 
   try {

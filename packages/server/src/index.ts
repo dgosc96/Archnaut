@@ -11,5 +11,5 @@ export {
   type HealthResponse,
   type NotFoundResponse,
 } from "./http.js";
-export { createMcpServer, createMcpTransport } from "./mcp.js";
+export { createMcpServer, createMcpTransport } from "./mcp/index.js";
 export { createStore, type Store, type CreateStoreOptions } from "./store.js";

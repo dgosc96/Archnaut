@@ -74,11 +74,36 @@ export {
   type ArchnautRepositoryOptions,
 } from "./repository/archnaut-repository.js";
 
+// Bootstrap
+export { createBootstrapArchitecture } from "./bootstrap/create-bootstrap-architecture.js";
+
 // DB projection
-export { migrateDb, clearDb } from "./db/migrate.js";
+export { EmptyArchitectureError } from "./db/errors.js";
+export { migrateDb, clearDb, clearNodesAndEdges } from "./db/migrate.js";
 export { initDbFromFile } from "./db/init-from-file.js";
 export { rebuildDbFromFile } from "./db/rebuild-from-file.js";
 export { getArchitectureSnapshot } from "./db/queries.js";
+export {
+  nodeExists,
+  workspaceExists,
+  upsertNode,
+  upsertEdge,
+  patchNode,
+  insertConcern,
+} from "./db/mutations.js";
 
 // Services
-export { loadValidateNormalize, persistArchitecture } from "./services/architecture-pipeline.js";
+export {
+  loadValidateNormalize,
+  persistArchitecture,
+  applyArchitectureMutation,
+  readArchitectureSnapshot,
+  applyUpsertNode,
+  applyUpsertEdge,
+  applyPatchNode,
+  applyInsertConcern,
+  type UpsertNodeInput,
+  type UpsertEdgeInput,
+  type PatchNodeInput,
+  type InsertConcernInput,
+} from "./services/architecture-pipeline.js";

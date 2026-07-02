@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 
 import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
 import { clearDb } from "./migrate.js";
+import { insertNodeChildren, prepareNodeChildrenInserts } from "./node-children.js";
 import {
   concernToRow,
   edgeToRow,
@@ -43,23 +44,15 @@ export function initDbFromFile(file: ArchnautFileV1, db: Database.Database): voi
       INSERT INTO nodes (id, name, workspace_id, kind, status, layer, metadata_json)
       VALUES (@id, @name, @workspace_id, @kind, @status, @layer, @metadata_json)
     `);
-    const insertFile = db.prepare(`
-      INSERT INTO node_files (node_id, path, ord) VALUES (?, ?, ?)
-    `);
-    const insertTag = db.prepare(`
-      INSERT INTO node_tags (node_id, tag) VALUES (?, ?)
-    `);
-    const insertTech = db.prepare(`
-      INSERT INTO node_tech (node_id, tech) VALUES (?, ?)
-    `);
+    const childInserts = prepareNodeChildrenInserts(db);
 
     for (const node of file.nodes) {
       insertNode.run(nodeToRow(node));
-      node.files.forEach((filePath, ord) => {
-        insertFile.run(node.id, filePath, ord);
+      insertNodeChildren(childInserts, node.id, {
+        files: node.files,
+        tags: node.tags,
+        tech: node.tech,
       });
-      node.tags?.forEach((tag) => insertTag.run(node.id, tag));
-      node.tech?.forEach((tech) => insertTech.run(node.id, tech));
     }
 
     const insertEdge = db.prepare(`

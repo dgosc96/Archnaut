@@ -3,8 +3,8 @@ import path from "node:path";
 
 import Database from "better-sqlite3";
 import {
+  createBootstrapArchitecture,
   migrateDb,
-  clearDb,
   initDbFromFile,
   loadValidateNormalize,
 } from "@archnaut/core";
@@ -51,7 +51,7 @@ async function archJsonExists(archJsonPath: string): Promise<boolean> {
  * @remarks
  * Ensures `.archnaut/` exists under the project root (unless `dbPath` is `':memory:'`) and opens
  * `db.sqlite` there by default. When `archnaut.json` is on disk, loads, validates, normalizes, and
- * projects it into SQLite; otherwise clears the runtime DB for bootstrap before the first scan.
+ * projects it into SQLite; otherwise seeds a minimal bootstrap projection for the first scan.
  */
 export async function createStore(
   archJsonPath: string,
@@ -72,7 +72,7 @@ export async function createStore(
     const normalized = await loadValidateNormalize(archJsonPath);
     initDbFromFile(normalized, db);
   } else {
-    clearDb(db);
+    initDbFromFile(createBootstrapArchitecture(projectRoot), db);
   }
 
   return {

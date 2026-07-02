@@ -62,6 +62,11 @@ describe("createStore", () => {
     for (const table of EMPTY_GRAPH_TABLES) {
       expect(tableCount(db, table)).toBe(0);
     }
+    expect((db.prepare("SELECT COUNT(*) AS c FROM project").get() as { c: number }).c).toBe(1);
+
+    const snapshot = getArchitectureSnapshot(db);
+    expect(snapshot.project.id).toMatch(/^repo\./);
+    expect(snapshot.nodes).toHaveLength(0);
 
     db.close();
   });
