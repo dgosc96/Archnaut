@@ -456,6 +456,9 @@ async function handleMarkImplemented(
  *
  * @param server - MCP server instance to register tools on.
  * @param store - Runtime store for DB access and `archnaut.json` path.
+ * @remarks
+ * Task tools rely on process-local mutation serialization in `@archnaut/core`. The store
+ * must be opened via {@link createStore} so only one server process owns a given database.
  */
 export function registerTaskTools(server: McpServer, store: Store): void {
   const db = store.getDb();

@@ -339,6 +339,8 @@ The default port is `7070`. Port `4200` (Angular CLI default) was rejected to av
 
 Archnaut runs as a **self-daemonizing background process**, fully owned and managed by the Archnaut CLI. Neither IDE extensions nor git hooks are responsible for starting or keeping the server alive.
 
+v0.1 assumes exactly one server process per project (one open store per `.archnaut/db.sqlite`); horizontal scaling is out of scope. Mutation serialization and task coordination rely on a process-local lock plus an exclusive `.archnaut/store.lock` at store open time.
+
 CLI commands:
 
 ```
