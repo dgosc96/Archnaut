@@ -65,3 +65,25 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value_json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('in_progress','completed','abandoned')),
+  parent_task_id TEXT REFERENCES tasks(id),
+  metadata_json TEXT,
+  notes TEXT,
+  planned_feature_ids_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_target_nodes (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  node_id TEXT NOT NULL,
+  PRIMARY KEY (task_id, node_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_target_nodes_node ON task_target_nodes(node_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON tasks(status, updated_at);

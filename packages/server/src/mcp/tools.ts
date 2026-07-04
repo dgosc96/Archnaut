@@ -17,6 +17,7 @@ import { z } from "zod";
 
 import type { Store } from "../store.js";
 import { errorResult, jsonResult, tryGetSnapshot } from "./responses.js";
+import { registerTaskTools } from "./task-tools.js";
 
 class NodeNotFoundError extends Error {
   constructor(nodeId: string) {
@@ -340,6 +341,8 @@ export function createMcpServer(store: Store): McpServer {
       return jsonResult({ id, created: true });
     },
   );
+
+  registerTaskTools(server, store);
 
   return server;
 }

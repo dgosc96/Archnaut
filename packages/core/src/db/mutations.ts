@@ -51,6 +51,13 @@ export type PatchNodeInput = {
   description?: string | null;
 };
 
+/** Input for partial edge update. */
+export type PatchEdgeInput = {
+  id: string;
+  status?: EdgeStatus;
+  description?: string | null;
+};
+
 /** Input for inserting a new concern. */
 export type InsertConcernInput = {
   id: string;
@@ -80,6 +87,18 @@ export function nodeExists(db: Database.Database, id: string): boolean {
 }
 
 /**
+ * Return whether an edge with the given ID exists.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ * @param id - Edge ID to check.
+ * @returns `true` when a matching edge row exists.
+ */
+export function edgeExists(db: Database.Database, id: string): boolean {
+  const row = db.prepare(`SELECT 1 FROM edges WHERE id = ?`).get(id);
+  return row !== undefined;
+}
+
+/**
  * Return whether a workspace with the given ID exists.
  *
  * @param db - Open better-sqlite3 database handle.
@@ -89,6 +108,48 @@ export function nodeExists(db: Database.Database, id: string): boolean {
 export function workspaceExists(db: Database.Database, id: string): boolean {
   const row = db.prepare(`SELECT 1 FROM workspaces WHERE id = ?`).get(id);
   return row !== undefined;
+}
+
+/**
+ * Return a node's current status, or null if missing.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ * @param id - Node ID to look up.
+ * @returns Node status, or `null` when the node does not exist.
+ */
+export function getNodeStatus(db: Database.Database, id: string): NodeStatus | null {
+  const row = db.prepare(`SELECT status FROM nodes WHERE id = ?`).get(id) as
+    | { status: NodeStatus }
+    | undefined;
+  return row?.status ?? null;
+}
+
+/**
+ * Return file paths attached to a node.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ * @param id - Node ID to look up.
+ * @returns Ordered file paths for the node (empty when none).
+ */
+export function getNodeFiles(db: Database.Database, id: string): string[] {
+  const rows = db
+    .prepare(`SELECT path FROM node_files WHERE node_id = ? ORDER BY ord`)
+    .all(id) as Array<{ path: string }>;
+  return rows.map((r) => r.path);
+}
+
+/**
+ * Return an edge's current status, or null if missing.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ * @param id - Edge ID to look up.
+ * @returns Edge status, or `null` when the edge does not exist.
+ */
+export function getEdgeStatus(db: Database.Database, id: string): EdgeStatus | null {
+  const row = db.prepare(`SELECT status FROM edges WHERE id = ?`).get(id) as
+    | { status: EdgeStatus }
+    | undefined;
+  return row?.status ?? null;
 }
 
 /**
@@ -213,6 +274,51 @@ export function patchNode(db: Database.Database, input: PatchNodeInput): void {
   });
 
   run();
+}
+
+type EdgePatchRow = {
+  from_id: string;
+  to_id: string;
+  type: string;
+  status: string;
+  metadata_json: string | null;
+};
+
+/**
+ * Partially update an existing edge. Only provided fields are changed.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ * @param input - Fields to update.
+ * @throws When the edge does not exist.
+ */
+export function patchEdge(db: Database.Database, input: PatchEdgeInput): void {
+  const row = db
+    .prepare(`SELECT from_id, to_id, type, status, metadata_json FROM edges WHERE id = ?`)
+    .get(input.id) as EdgePatchRow | undefined;
+
+  if (!row) {
+    throw new Error(`Edge '${input.id}' not found`);
+  }
+
+  const status = input.status ?? row.status;
+  let metadataJson = row.metadata_json;
+  if (input.description !== undefined) {
+    const metadata: Record<string, unknown> = row.metadata_json
+      ? (JSON.parse(row.metadata_json) as Record<string, unknown>)
+      : {};
+    if (input.description === null) {
+      delete metadata.description;
+    } else {
+      metadata.description = input.description;
+    }
+    metadataJson = Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
+  }
+
+  db.prepare(`UPDATE edges SET status = ?, metadata_json = ? WHERE id = ?`).run(
+    status,
+    metadataJson,
+    input.id,
+  );
 }
 
 /**

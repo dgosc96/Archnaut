@@ -25,6 +25,7 @@ import { getArchitectureSnapshot } from "../db/queries.js";
 export type {
   InsertConcernInput,
   PatchNodeInput,
+  PatchEdgeInput,
   UpsertEdgeInput,
   UpsertNodeInput,
 } from "../db/mutations.js";
@@ -196,6 +197,23 @@ export async function applyArchitectureMutation(
   });
 }
 
+/**
+ * Apply a synchronous task-only mutation under the shared mutation lock.
+ *
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param mutate - Synchronous function that mutates task tables in-place.
+ * @returns Resolves when the mutation completes successfully.
+ * @throws When `mutate` throws.
+ * @remarks Does not read or write `archnaut.json`; task state is SQLite-only.
+ */
+export async function applyTaskMutation(
+  db: Database.Database,
+  mutate: () => void,
+): Promise<void> {
+  return withMutationLock(async () => {
+    db.transaction(mutate)();
+  });
+}
 /**
  * Upsert a node and persist the result to `archnaut.json`.
  *
