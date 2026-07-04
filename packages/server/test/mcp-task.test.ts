@@ -128,9 +128,9 @@ async function expectStoreUnchanged(
 function simulateClearBeforeLockedMutation(): () => void {
   const original = core.applyArchitectureMutation;
   const spy = vi.spyOn(core, "applyArchitectureMutation").mockImplementation(
-    async (path, db, mutate) => {
+    async (archPath, db, mutate) => {
       clearNodesAndEdges(db);
-      return original(path, db, mutate);
+      return original(archPath, db, mutate);
     },
   );
   return () => spy.mockRestore();
