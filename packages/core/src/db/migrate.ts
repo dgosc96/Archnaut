@@ -141,8 +141,11 @@ export function clearTasks(db: Database.Database): void {
  * @param db - Open better-sqlite3 database handle.
  */
 export function clearDb(db: Database.Database): void {
-  clearArchitectureProjection(db);
-  clearTasks(db);
+  const run = db.transaction(() => {
+    clearArchitectureProjection(db);
+    clearTasks(db);
+  });
+  run();
 }
 
 /**

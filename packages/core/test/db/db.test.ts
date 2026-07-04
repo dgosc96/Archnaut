@@ -9,6 +9,7 @@ import { EmptyArchitectureError } from "../../src/db/errors.js";
 import { getArchitectureSnapshot } from "../../src/db/queries.js";
 import { initDbFromFile } from "../../src/db/init-from-file.js";
 import { migrateDb, clearDb, clearNodesAndEdges } from "../../src/db/migrate.js";
+import { insertTask } from "../../src/db/task-mutations.js";
 import { rebuildDbFromFile } from "../../src/db/rebuild-from-file.js";
 import { normalizeArchnautFile } from "../../src/normalize/normalize-archnaut-file.js";
 import { saveArchnautFile } from "../../src/repository/save.js";
@@ -89,6 +90,36 @@ describe("SQLite projection", () => {
     clearDb(db);
     const count = db.prepare(`SELECT COUNT(*) AS c FROM nodes`).get() as { c: number };
     expect(count.c).toBe(0);
+    db.close();
+  });
+
+  it("clearDb rolls back architecture deletes when task clear fails", () => {
+    const db = new Database(":memory:");
+    migrateDb(db);
+    initDbFromFile(normalizeArchnautFile(shopPlatformFixture), db);
+    insertTask(db, {
+      id: "task.rollback",
+      agentId: "agent-1",
+      summary: "Rollback probe",
+      targetNodeIds: ["cmp.api.checkout"],
+      createdAt: "2026-07-03T12:00:00.000Z",
+      updatedAt: "2026-07-03T12:00:00.000Z",
+    });
+
+    const originalExec = db.exec.bind(db);
+    db.exec = (sql: string) => {
+      if (sql.includes("DELETE FROM tasks")) {
+        throw new Error("simulated task clear failure");
+      }
+      return originalExec(sql);
+    };
+
+    expect(() => clearDb(db)).toThrow("simulated task clear failure");
+
+    const nodes = db.prepare(`SELECT COUNT(*) AS c FROM nodes`).get() as { c: number };
+    const tasks = db.prepare(`SELECT COUNT(*) AS c FROM tasks`).get() as { c: number };
+    expect(nodes.c).toBeGreaterThan(0);
+    expect(tasks.c).toBe(1);
     db.close();
   });
 
