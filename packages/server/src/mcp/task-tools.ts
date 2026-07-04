@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   applyArchitectureMutation,
+  applyTaskMutation as applyTaskMutationLocked,
   abandonTask,
   completeTaskRecord,
   edgeExists,
@@ -133,6 +134,17 @@ async function runLockedTaskMutation(
   });
 }
 
+async function applyTaskMutation(
+  db: Database.Database,
+  validate: () => void,
+  mutate: () => void,
+): Promise<void> {
+  await applyTaskMutationLocked(db, () => {
+    validate();
+    mutate();
+  });
+}
+
 function nodeSnapshots(snapshot: ArchnautFileV1, nodeIds: string[]): Node[] {
   const byId = new Map(snapshot.nodes.map((n) => [n.id, n]));
   return nodeIds.map((id) => byId.get(id)).filter((n): n is Node => n !== undefined);
@@ -194,7 +206,7 @@ type BeginTaskInput = {
 };
 
 async function handleBeginTask(
-  archPath: string,
+  _archPath: string,
   db: Database.Database,
   snapshot: ArchnautFileV1,
   input: BeginTaskInput,
@@ -218,8 +230,7 @@ async function handleBeginTask(
   let idempotentTask: TaskRecord | null = null;
   let warnings: string[] = [];
 
-  await runLockedTaskMutation(
-    archPath,
+  await applyTaskMutation(
     db,
     () => validateNodesExist(db, allNodeIds),
     () => {
@@ -318,14 +329,17 @@ async function handleCompleteTask(
   const updatedEdgeIds: string[] = [];
   const claimed = new Set(task.targetNodeIds);
 
-  await runLockedTaskMutation(
-    archPath,
-    db,
-    () => {
-      validateNodesExist(db, implementedNodeIds);
-      validateEdgesExist(db, implementedEdgeIds);
-    },
-    () => {
+  const willPatchArchitecture =
+    input.status === "completed" &&
+    (implementedNodeIds.some((id) => getNodeStatus(db, id) === "planned") ||
+      implementedEdgeIds.some((id) => getEdgeStatus(db, id) === "planned"));
+
+  const validate = () => {
+    validateNodesExist(db, implementedNodeIds);
+    validateEdgesExist(db, implementedEdgeIds);
+  };
+
+  const mutate = () => {
     const current = getTask(db, input.taskId);
     if (!current) throw new TaskNotFoundError(input.taskId);
     if (current.status !== "in_progress") {
@@ -388,8 +402,13 @@ async function handleCompleteTask(
     }
 
     completeTaskRecord(db, input.taskId, input.status, now, input.notes);
-    },
-  );
+  };
+
+  if (willPatchArchitecture) {
+    await runLockedTaskMutation(archPath, db, validate, mutate);
+  } else {
+    await applyTaskMutation(db, validate, mutate);
+  }
 
   return {
     ok: true as const,
@@ -407,22 +426,29 @@ async function handleMarkImplemented(
   db: Database.Database,
   featureId: string,
 ) {
-  let updated = false;
+  if (getNodeStatus(db, featureId) === "implemented") {
+    await applyTaskMutation(db, () => validateNodesExist(db, [featureId]), () => {});
+    return {
+      ok: true as const,
+      featureId,
+      status: "implemented" as const,
+      updated: false,
+    };
+  }
+
   await runLockedTaskMutation(
     archPath,
     db,
     () => validateNodesExist(db, [featureId]),
     () => {
-      if (getNodeStatus(db, featureId) === "implemented") return;
       patchNode(db, { id: featureId, status: "implemented" });
-      updated = true;
     },
   );
   return {
     ok: true as const,
     featureId,
     status: "implemented" as const,
-    updated,
+    updated: true,
   };
 }
 

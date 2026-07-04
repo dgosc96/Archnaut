@@ -134,6 +134,16 @@ function simulateClearBeforeLockedMutation(): () => void {
   return () => spy.mockRestore();
 }
 
+/** Simulates cleararchitecture winning the race before a task-only locked mutation runs. */
+function simulateClearBeforeTaskMutation(): () => void {
+  const original = core.applyTaskMutation;
+  const spy = vi.spyOn(core, "applyTaskMutation").mockImplementation(async (db, mutate) => {
+    clearNodesAndEdges(db);
+    return original(db, mutate);
+  });
+  return () => spy.mockRestore();
+}
+
 describe("MCP task lifecycle tools", () => {
   it("begin_task success creates task and returns context", async () => {
     store = await makeStore();
@@ -363,6 +373,27 @@ describe("MCP task lifecycle tools", () => {
     expect(rows.c).toBe(1);
   });
 
+  it("begin_task idempotent retry leaves archnaut.json unchanged", async () => {
+    store = await makeStore();
+    seedStore(store);
+    const before = getArchitectureSnapshot(store.getDb());
+    await saveArchnautFile(store.getArchJsonPath(), before);
+    const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const args = {
+      taskId: "task.idem-json",
+      agentId: "agent-1",
+      summary: "Idempotent json",
+      targetNodeIds: ["cmp.ui"],
+    };
+    await callTool(port, "begin_task", args);
+    await callTool(port, "begin_task", args);
+
+    await expectStoreUnchanged(store, before, jsonBefore);
+  });
+
   it("begin_task idempotent retry succeeds when metadata keys are reordered", async () => {
     store = await makeStore();
     seedStore(store);
@@ -438,7 +469,7 @@ describe("MCP task lifecycle tools", () => {
     server = await startServer(store, 0);
     const port = getServerPort(server);
 
-    const restore = simulateClearBeforeLockedMutation();
+    const restore = simulateClearBeforeTaskMutation();
     try {
       const res = await callTool(port, "begin_task", {
         taskId: "task.race",
@@ -524,6 +555,34 @@ describe("MCP task lifecycle tools", () => {
     expect(getTask(store.getDb(), "task.ui")?.status).toBe("completed");
   });
 
+  it("complete_task abandoned finalizes task without persisting architecture", async () => {
+    store = await makeStore();
+    seedStore(store);
+    const before = getArchitectureSnapshot(store.getDb());
+    await saveArchnautFile(store.getArchJsonPath(), before);
+    const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    await callTool(port, "begin_task", {
+      taskId: "task.abandon",
+      agentId: "agent-1",
+      summary: "Abandon work",
+      targetNodeIds: ["cmp.ui"],
+    });
+
+    const res = await callTool(port, "complete_task", {
+      taskId: "task.abandon",
+      status: "abandoned",
+    });
+    const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
+    const { parsed, isError } = parseToolResult<{ status: string }>(body);
+    expect(isError).toBe(false);
+    expect(parsed?.status).toBe("abandoned");
+    expect(getTask(store.getDb(), "task.abandon")?.status).toBe("abandoned");
+    expect(await readFile(store.getArchJsonPath(), "utf8")).toBe(jsonBefore);
+  });
+
   it("complete_task returns error for unknown task", async () => {
     store = await makeStore();
     seedStore(store);
@@ -607,6 +666,9 @@ describe("MCP task lifecycle tools", () => {
   it("markimplemented is no-op when already implemented", async () => {
     store = await makeStore();
     seedStore(store);
+    const before = getArchitectureSnapshot(store.getDb());
+    await saveArchnautFile(store.getArchJsonPath(), before);
+    const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
     server = await startServer(store, 0);
     const port = getServerPort(server);
 
@@ -615,6 +677,7 @@ describe("MCP task lifecycle tools", () => {
     const { parsed, isError } = parseToolResult<{ updated: boolean }>(body);
     expect(isError).toBe(false);
     expect(parsed?.updated).toBe(false);
+    await expectStoreUnchanged(store, before, jsonBefore);
   });
 
   it("markimplemented rejects node cleared before locked mutation runs", async () => {
