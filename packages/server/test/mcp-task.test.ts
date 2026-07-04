@@ -10,6 +10,7 @@ import {
   getTask,
   initDbFromFile,
   insertTask,
+  patchNode,
   saveArchnautFile,
   TASK_STALE_MS,
   type ArchnautFileV1,
@@ -17,6 +18,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { startServer } from "../src/http.js";
+import * as responses from "../src/mcp/responses.js";
 import { createStore, type Store } from "../src/store.js";
 
 const SEED_FILE: ArchnautFileV1 = {
@@ -349,6 +351,42 @@ describe("MCP task lifecycle tools", () => {
     const { isError, text } = parseToolResult(body);
     expect(isError).toBe(true);
     expect(text).toMatch(/finalized/i);
+  });
+
+  it("begin_task idempotent retry returns fresh target node context", async () => {
+    store = await makeStore();
+    seedStore(store);
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const args = {
+      taskId: "task.fresh-ctx",
+      agentId: "agent-1",
+      summary: "Fresh context",
+      targetNodeIds: ["cmp.ui"],
+    };
+    await callTool(port, "begin_task", args);
+
+    patchNode(store.getDb(), { id: "cmp.ui", status: "implemented" });
+
+    const current = getArchitectureSnapshot(store.getDb());
+    const staleSnapshot: ArchnautFileV1 = {
+      ...current,
+      nodes: current.nodes.map((n) =>
+        n.id === "cmp.ui" ? { ...n, status: "planned" as const } : n,
+      ),
+    };
+    const spy = vi.spyOn(responses, "tryGetSnapshot").mockResolvedValue(staleSnapshot);
+
+    const res = await callTool(port, "begin_task", args);
+    const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
+    const { parsed, isError } = parseToolResult<{
+      context: { targetNodes: Array<{ id: string; status: string }> };
+    }>(body);
+
+    spy.mockRestore();
+    expect(isError).toBe(false);
+    expect(parsed?.context.targetNodes[0]?.status).toBe("implemented");
   });
 
   it("begin_task idempotent retry returns same task without duplicate row", async () => {

@@ -208,7 +208,6 @@ type BeginTaskInput = {
 async function handleBeginTask(
   _archPath: string,
   db: Database.Database,
-  snapshot: ArchnautFileV1,
   input: BeginTaskInput,
 ) {
   const allNodeIds = [
@@ -293,7 +292,7 @@ async function handleBeginTask(
   );
 
   if (idempotentTask) {
-    return buildBeginTaskResponse(idempotentTask, snapshot, []);
+    return buildBeginTaskResponse(idempotentTask, getArchitectureSnapshot(db), []);
   }
 
   const task = getTask(db, input.taskId);
@@ -483,7 +482,7 @@ export function registerTaskTools(server: McpServer, store: Store): void {
       if ("isError" in snapshot) return errorResult(snapshot.message);
 
       try {
-        const result = await handleBeginTask(archPath, db, snapshot, input);
+        const result = await handleBeginTask(archPath, db, input);
         return jsonResult(result);
       } catch (error) {
         if (
