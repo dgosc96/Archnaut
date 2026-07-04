@@ -451,6 +451,16 @@ async function handleMarkImplemented(
   };
 }
 
+function toKnownErrorResult(
+  error: unknown,
+  knownErrors: Array<new (...args: never[]) => Error>,
+) {
+  if (knownErrors.some((E) => error instanceof E)) {
+    return errorResult((error as Error).message);
+  }
+  throw error;
+}
+
 /**
  * Register MCP task lifecycle tools on the server.
  *
@@ -488,14 +498,11 @@ export function registerTaskTools(server: McpServer, store: Store): void {
         const result = await handleBeginTask(archPath, db, input);
         return jsonResult(result);
       } catch (error) {
-        if (
-          error instanceof NodeNotFoundError ||
-          error instanceof TaskFinalizedError ||
-          error instanceof TaskInProgressConflictError
-        ) {
-          return errorResult(error.message);
-        }
-        throw error;
+        return toKnownErrorResult(error, [
+          NodeNotFoundError,
+          TaskFinalizedError,
+          TaskInProgressConflictError,
+        ]);
       }
     },
   );
@@ -519,15 +526,12 @@ export function registerTaskTools(server: McpServer, store: Store): void {
         const result = await handleCompleteTask(archPath, db, input);
         return jsonResult(result);
       } catch (error) {
-        if (
-          error instanceof TaskNotFoundError ||
-          error instanceof TaskNotInProgressError ||
-          error instanceof NodeNotFoundError ||
-          error instanceof EdgeNotFoundError
-        ) {
-          return errorResult(error.message);
-        }
-        throw error;
+        return toKnownErrorResult(error, [
+          TaskNotFoundError,
+          TaskNotInProgressError,
+          NodeNotFoundError,
+          EdgeNotFoundError,
+        ]);
       }
     },
   );
@@ -546,8 +550,7 @@ export function registerTaskTools(server: McpServer, store: Store): void {
         const result = await handleMarkImplemented(archPath, db, featureId);
         return jsonResult(result);
       } catch (error) {
-        if (error instanceof NodeNotFoundError) return errorResult(error.message);
-        throw error;
+        return toKnownErrorResult(error, [NodeNotFoundError]);
       }
     },
   );
