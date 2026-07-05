@@ -102,8 +102,11 @@ function acquireStoreLock(dbPath: string): StoreLock | null {
       retries: 0,
     });
     return { release, lockPath };
-  } catch {
-    throw new SingleStoreError(lockPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ELOCKED") {
+      throw new SingleStoreError(lockPath);
+    }
+    throw error;
   }
 }
 
