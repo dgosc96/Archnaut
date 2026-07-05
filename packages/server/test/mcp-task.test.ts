@@ -156,6 +156,18 @@ function simulateRevertToPlannedBeforeTaskMutation(featureId: string): () => voi
   return () => spy.mockRestore();
 }
 
+/** Simulates a rescan flipping an implemented node back to planned before locked mutate runs. */
+function simulateRevertToPlannedBeforeLockedMutation(featureId: string): () => void {
+  const original = core.applyArchitectureMutation;
+  const spy = vi.spyOn(core, "applyArchitectureMutation").mockImplementation(
+    async (archPath, db, mutate) => {
+      patchNode(db, { id: featureId, status: "planned" });
+      return original(archPath, db, mutate);
+    },
+  );
+  return () => spy.mockRestore();
+}
+
 describe("MCP task lifecycle tools", () => {
   it("begin_task success creates task and returns context", async () => {
     store = await makeStore();
@@ -601,6 +613,47 @@ describe("MCP task lifecycle tools", () => {
     expect(file.nodes.find((n) => n.id === "cmp.ui")?.status).toBe("implemented");
     expect(file.edges.find((e) => e.id === "edge.ui-api")?.status).toBe("implemented");
     expect(getTask(store.getDb(), "task.ui")?.status).toBe("completed");
+  });
+
+  it("complete_task persists when implemented node flips to planned before locked mutate runs", async () => {
+    store = await makeStore();
+    seedStore(store);
+    const before = getArchitectureSnapshot(store.getDb());
+    await saveArchnautFile(store.getArchJsonPath(), before);
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    await callTool(port, "begin_task", {
+      taskId: "task.api",
+      agentId: "agent-1",
+      summary: "API work",
+      targetNodeIds: ["cmp.api"],
+    });
+
+    const restore = simulateRevertToPlannedBeforeLockedMutation("cmp.api");
+    try {
+      const res = await callTool(port, "complete_task", {
+        taskId: "task.api",
+        status: "completed",
+        implementedNodeIds: ["cmp.api"],
+      });
+      const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
+      const { parsed, isError } = parseToolResult<{
+        status: string;
+        updatedNodeIds: string[];
+        normalized: boolean;
+      }>(body);
+      expect(isError).toBe(false);
+      expect(parsed?.status).toBe("completed");
+      expect(parsed?.updatedNodeIds).toEqual(["cmp.api"]);
+      expect(parsed?.normalized).toBe(true);
+
+      const file = JSON.parse(await readFile(store.getArchJsonPath(), "utf8")) as ArchnautFileV1;
+      expect(file.nodes.find((n) => n.id === "cmp.api")?.status).toBe("implemented");
+      expect(getTask(store.getDb(), "task.api")?.status).toBe("completed");
+    } finally {
+      restore();
+    }
   });
 
   it("complete_task abandoned finalizes task without persisting architecture", async () => {

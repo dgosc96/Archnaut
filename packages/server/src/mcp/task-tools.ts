@@ -328,11 +328,6 @@ async function handleCompleteTask(
   const updatedEdgeIds: string[] = [];
   const claimed = new Set(task.targetNodeIds);
 
-  const willPatchArchitecture =
-    input.status === "completed" &&
-    (implementedNodeIds.some((id) => getNodeStatus(db, id) === "planned") ||
-      implementedEdgeIds.some((id) => getEdgeStatus(db, id) === "planned"));
-
   const validate = () => {
     validateNodesExist(db, implementedNodeIds);
     validateEdgesExist(db, implementedEdgeIds);
@@ -403,7 +398,7 @@ async function handleCompleteTask(
     completeTaskRecord(db, input.taskId, input.status, now, input.notes);
   };
 
-  if (willPatchArchitecture) {
+  if (input.status === "completed") {
     await runLockedTaskMutation(archPath, db, validate, mutate);
   } else {
     await applyTaskMutation(db, validate, mutate);
