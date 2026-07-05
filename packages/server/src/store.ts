@@ -1,5 +1,5 @@
 import { access, mkdir } from "node:fs/promises";
-import { closeSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 
 import Database from "better-sqlite3";
@@ -9,6 +9,10 @@ import {
   initDbFromFile,
   loadValidateNormalize,
 } from "@archnaut/core";
+import lockfile from "proper-lockfile";
+
+const STORE_LOCK_STALE_MS = 10_000;
+const STORE_LOCK_UPDATE_MS = 5_000;
 
 /**
  * Thrown when another process already holds the exclusive store lock for this project.
@@ -59,23 +63,20 @@ async function archJsonExists(archJsonPath: string): Promise<boolean> {
   }
 }
 
-function isProcessAlive(pid: number): boolean {
+type StoreLock = { release: () => void; lockPath: string };
+
+function migrateLegacyStoreLockFile(lockPath: string): void {
   try {
-    process.kill(pid, 0);
-    return true;
+    if (statSync(lockPath).isFile()) {
+      unlinkSync(lockPath);
+    }
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EPERM") {
-      return true;
+    if (code !== "ENOENT") {
+      throw error;
     }
-    if (code === "ESRCH" || code === "ENOENT") {
-      return false;
-    }
-    return true;
   }
 }
-
-type StoreLock = { fd: number; lockPath: string };
 
 /**
  * Acquire an exclusive on-disk store lock for the given database path.
@@ -90,41 +91,20 @@ function acquireStoreLock(dbPath: string): StoreLock | null {
   }
 
   const lockPath = path.join(path.dirname(dbPath), "store.lock");
+  migrateLegacyStoreLockFile(lockPath);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const fd = openSync(lockPath, "wx");
-      writeSync(fd, JSON.stringify({ pid: process.pid }));
-      return { fd, lockPath };
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") {
-        throw error;
-      }
-
-      let stale = true;
-      try {
-        const raw = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: number };
-        if (typeof raw.pid === "number" && isProcessAlive(raw.pid)) {
-          stale = false;
-        }
-      } catch {
-        // unreadable lock file — treat as stale
-      }
-
-      if (!stale) {
-        throw new SingleStoreError(lockPath);
-      }
-
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        throw new SingleStoreError(lockPath);
-      }
-    }
+  try {
+    const release = lockfile.lockSync("", {
+      lockfilePath: lockPath,
+      realpath: false,
+      stale: STORE_LOCK_STALE_MS,
+      update: STORE_LOCK_UPDATE_MS,
+      retries: 0,
+    });
+    return { release, lockPath };
+  } catch {
+    throw new SingleStoreError(lockPath);
   }
-
-  throw new SingleStoreError(path.join(path.dirname(dbPath), "store.lock"));
 }
 
 /**
@@ -133,9 +113,8 @@ function acquireStoreLock(dbPath: string): StoreLock | null {
  * @param lock - Lock handle returned from `acquireStoreLock`.
  */
 function releaseStoreLock(lock: StoreLock): void {
-  closeSync(lock.fd);
   try {
-    unlinkSync(lock.lockPath);
+    lock.release();
   } catch (error) {
     console.error(
       JSON.stringify({

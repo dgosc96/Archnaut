@@ -1,11 +1,11 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import type Database from "better-sqlite3";
 
 import { getArchitectureSnapshot, saveArchnautFile } from "@archnaut/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { createStore, SingleStoreError } from "../src/store.js";
 import { shopPlatformFixture } from "../../core/test/fixtures/shop-platform.js";
@@ -104,60 +104,49 @@ describe("createStore", () => {
     store.close();
   });
 
-  it("does not reclaim store lock when lock holder pid returns EPERM from kill", async () => {
+  it("blocks when lock dir exists with fresh mtime", async () => {
     const dir = await makeTempDir();
     const jsonPath = path.join(dir, "archnaut.json");
     const dbPath = path.join(dir, ".archnaut", "db.sqlite");
     const lockPath = path.join(dir, ".archnaut", "store.lock");
-    const foreignPid = 99_999;
 
     await mkdir(path.dirname(lockPath), { recursive: true });
-    await writeFile(lockPath, JSON.stringify({ pid: foreignPid }), "utf8");
+    await mkdir(lockPath);
+    const now = new Date();
+    await utimes(lockPath, now, now);
 
-    const originalKill = process.kill.bind(process);
-    const killSpy = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
-      if (pid === foreignPid && signal === 0) {
-        const err = new Error("Operation not permitted") as NodeJS.ErrnoException;
-        err.code = "EPERM";
-        throw err;
-      }
-      return originalKill(pid, signal);
-    });
-
-    try {
-      await expect(createStore(jsonPath, { dbPath })).rejects.toThrow(SingleStoreError);
-    } finally {
-      killSpy.mockRestore();
-    }
+    await expect(createStore(jsonPath, { dbPath })).rejects.toThrow(SingleStoreError);
   });
 
-  it("reclaims stale store lock when lock holder pid returns ESRCH from kill", async () => {
+  it("reclaims stale store lock when lock dir mtime is older than stale threshold", async () => {
     const dir = await makeTempDir();
     const jsonPath = path.join(dir, "archnaut.json");
     const dbPath = path.join(dir, ".archnaut", "db.sqlite");
     const lockPath = path.join(dir, ".archnaut", "store.lock");
-    const deadPid = 88_888;
 
     await mkdir(path.dirname(lockPath), { recursive: true });
-    await writeFile(lockPath, JSON.stringify({ pid: deadPid }), "utf8");
+    await mkdir(lockPath);
+    const staleTime = new Date(Date.now() - 60_000);
+    await utimes(lockPath, staleTime, staleTime);
 
-    const originalKill = process.kill.bind(process);
-    const killSpy = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
-      if (pid === deadPid && signal === 0) {
-        const err = new Error("No such process") as NodeJS.ErrnoException;
-        err.code = "ESRCH";
-        throw err;
-      }
-      return originalKill(pid, signal);
-    });
+    const store = await createStore(jsonPath, { dbPath });
+    await expect(access(lockPath)).resolves.toBeUndefined();
+    expect((await stat(lockPath)).isDirectory()).toBe(true);
+    store.close();
+  });
 
-    try {
-      const store = await createStore(jsonPath, { dbPath });
-      await expect(access(lockPath)).resolves.toBeUndefined();
-      store.close();
-    } finally {
-      killSpy.mockRestore();
-    }
+  it("migrates legacy JSON store.lock file", async () => {
+    const dir = await makeTempDir();
+    const jsonPath = path.join(dir, "archnaut.json");
+    const dbPath = path.join(dir, ".archnaut", "db.sqlite");
+    const lockPath = path.join(dir, ".archnaut", "store.lock");
+
+    await mkdir(path.dirname(lockPath), { recursive: true });
+    await writeFile(lockPath, JSON.stringify({ pid: 88_888 }), "utf8");
+
+    const store = await createStore(jsonPath, { dbPath });
+    expect((await stat(lockPath)).isDirectory()).toBe(true);
+    store.close();
   });
 
   it("releases store lock on close so the same db path can reopen", async () => {
