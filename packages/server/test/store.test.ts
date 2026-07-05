@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -78,6 +78,30 @@ describe("createStore", () => {
     const store1 = await createStore(jsonPath, { dbPath });
     await expect(createStore(jsonPath, { dbPath })).rejects.toThrow(SingleStoreError);
     store1.close();
+  });
+
+  it("releases store lock when initialization fails so retry succeeds", async () => {
+    const dir = await makeTempDir();
+    const jsonPath = path.join(dir, "archnaut.json");
+    const dbPath = path.join(dir, ".archnaut", "db.sqlite");
+    const lockPath = path.join(dir, ".archnaut", "store.lock");
+    const invalid = JSON.stringify({
+      version: 1,
+      project: {},
+      workspaces: [],
+      nodes: [],
+      edges: [],
+      concerns: [],
+      meta: {},
+    });
+    await writeFile(jsonPath, invalid, "utf8");
+
+    await expect(createStore(jsonPath, { dbPath })).rejects.toThrow();
+    await expect(access(lockPath)).rejects.toThrow();
+
+    await rm(jsonPath);
+    const store = await createStore(jsonPath, { dbPath });
+    store.close();
   });
 
   it("releases store lock on close so the same db path can reopen", async () => {

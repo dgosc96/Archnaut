@@ -172,15 +172,25 @@ export async function createStore(
   }
 
   const lock = acquireStoreLock(dbPath);
+  let db: Database.Database | undefined;
 
-  const db = new Database(dbPath);
-  migrateDb(db);
+  try {
+    db = new Database(dbPath);
+    migrateDb(db);
 
-  if (await archJsonExists(archJsonPath)) {
-    const normalized = await loadValidateNormalize(archJsonPath);
-    initDbFromFile(normalized, db);
-  } else {
-    initDbFromFile(createBootstrapArchitecture(projectRoot), db);
+    if (await archJsonExists(archJsonPath)) {
+      const normalized = await loadValidateNormalize(archJsonPath);
+      initDbFromFile(normalized, db);
+    } else {
+      initDbFromFile(createBootstrapArchitecture(projectRoot), db);
+    }
+  } catch (error) {
+    try {
+      db?.close();
+    } finally {
+      if (lock !== null) releaseStoreLock(lock);
+    }
+    throw error;
   }
 
   return {
