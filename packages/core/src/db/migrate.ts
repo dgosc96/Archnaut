@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-const DDL = `
+const ARCHITECTURE_DDL = `
 CREATE TABLE IF NOT EXISTS project (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -68,6 +68,28 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value_json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('in_progress','completed','abandoned')),
+  parent_task_id TEXT REFERENCES tasks(id),
+  metadata_json TEXT,
+  notes TEXT,
+  planned_feature_ids_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_target_nodes (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  node_id TEXT NOT NULL,
+  PRIMARY KEY (task_id, node_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_target_nodes_node ON task_target_nodes(node_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON tasks(status, updated_at);
 `;
 
 /**
@@ -76,18 +98,18 @@ CREATE TABLE IF NOT EXISTS meta (
  * @param db - Open better-sqlite3 database handle.
  */
 export function migrateDb(db: Database.Database): void {
-  db.exec(DDL);
+  db.exec(ARCHITECTURE_DDL);
 }
 
 /**
- * Delete all rows from every projection table without dropping schema.
+ * Delete architecture projection rows without dropping schema or runtime task tables.
  *
  * @param db - Open better-sqlite3 database handle.
  *
- * @remarks Called at the start of {@link initDbFromFile} so hydration always replaces the
- * full runtime snapshot rather than merging incrementally.
+ * @remarks Called at the start of {@link initDbFromFile} so hydration replaces the
+ * git-tracked projection while preserving runtime-only task lifecycle state.
  */
-export function clearDb(db: Database.Database): void {
+export function clearArchitectureProjection(db: Database.Database): void {
   db.exec(`
     DELETE FROM node_files;
     DELETE FROM node_tags;
@@ -99,6 +121,31 @@ export function clearDb(db: Database.Database): void {
     DELETE FROM project;
     DELETE FROM meta;
   `);
+}
+
+/**
+ * Delete all runtime task rows.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ */
+export function clearTasks(db: Database.Database): void {
+  db.exec(`
+    DELETE FROM task_target_nodes;
+    DELETE FROM tasks;
+  `);
+}
+
+/**
+ * Delete all rows from every table without dropping schema.
+ *
+ * @param db - Open better-sqlite3 database handle.
+ */
+export function clearDb(db: Database.Database): void {
+  const run = db.transaction(() => {
+    clearArchitectureProjection(db);
+    clearTasks(db);
+  });
+  run();
 }
 
 /**

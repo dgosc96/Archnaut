@@ -17,6 +17,7 @@ import { migrateDb } from "../../src/db/migrate.js";
 import * as queriesModule from "../../src/db/queries.js";
 import { getArchitectureSnapshot } from "../../src/db/queries.js";
 import { upsertNode } from "../../src/db/mutations.js";
+import { insertTask, getTask } from "../../src/db/task-mutations.js";
 import {
   applyArchitectureMutation,
   loadValidateNormalize,
@@ -345,6 +346,37 @@ describe("architecture pipeline", () => {
 
     expect(getArchitectureSnapshot(db)).toEqual(before);
     expect(await readFile(filePath, "utf8")).toBe(jsonBefore);
+    db.close();
+  });
+
+  it("applyArchitectureMutation preserves runtime task rows across initDbFromFile", async () => {
+    const dir = await makeTempDir();
+    const filePath = path.join(dir, "archnaut.json");
+    const db = new Database(":memory:");
+    migrateDb(db);
+    await persistArchitecture(filePath, shopPlatformFixture, db);
+
+    insertTask(db, {
+      id: "task-survive",
+      agentId: "agent-a",
+      summary: "Keep me",
+      targetNodeIds: ["cmp.api.checkout"],
+      createdAt: "2026-07-03T12:00:00.000Z",
+      updatedAt: "2026-07-03T12:00:00.000Z",
+    });
+
+    await applyArchitectureMutation(filePath, db, () => {
+      upsertNode(db, {
+        id: "cmp.extra",
+        name: "Extra",
+        kind: "component",
+        status: "planned",
+        files: [],
+      });
+    });
+
+    expect(getTask(db, "task-survive")?.status).toBe("in_progress");
+    expect(getArchitectureSnapshot(db).nodes.some((n) => n.id === "cmp.extra")).toBe(true);
     db.close();
   });
 });

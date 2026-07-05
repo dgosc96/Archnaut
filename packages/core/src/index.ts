@@ -79,24 +79,44 @@ export { createBootstrapArchitecture } from "./bootstrap/create-bootstrap-archit
 
 // DB projection
 export { EmptyArchitectureError } from "./db/errors.js";
-export { migrateDb, clearDb, clearNodesAndEdges } from "./db/migrate.js";
+export { migrateDb, clearDb, clearArchitectureProjection, clearTasks, clearNodesAndEdges } from "./db/migrate.js";
 export { initDbFromFile } from "./db/init-from-file.js";
 export { rebuildDbFromFile } from "./db/rebuild-from-file.js";
 export { getArchitectureSnapshot } from "./db/queries.js";
 export {
   nodeExists,
+  edgeExists,
   workspaceExists,
+  getNodeStatus,
+  getNodeFiles,
+  getEdgeStatus,
   upsertNode,
   upsertEdge,
   patchNode,
+  patchEdge,
   insertConcern,
 } from "./db/mutations.js";
+export {
+  TASK_STALE_MS,
+  insertTask,
+  getTask,
+  findOverlappingActiveTasks,
+  findStaleOverlappingTasks,
+  abandonTask,
+  completeTaskRecord,
+  taskPayloadMatches,
+  type TaskRecord,
+  type TaskStatus,
+  type InsertTaskInput,
+  type TaskPayload,
+} from "./db/task-mutations.js";
 
 // Services
 export {
   loadValidateNormalize,
   persistArchitecture,
   applyArchitectureMutation,
+  applyTaskMutation,
   readArchitectureSnapshot,
   applyUpsertNode,
   applyUpsertEdge,
@@ -105,5 +125,6 @@ export {
   type UpsertNodeInput,
   type UpsertEdgeInput,
   type PatchNodeInput,
+  type PatchEdgeInput,
   type InsertConcernInput,
 } from "./services/architecture-pipeline.js";

@@ -24,11 +24,13 @@
     "@archnaut/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "better-sqlite3": "^11.10.0",
+    "proper-lockfile": "^4.1.2",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.21",
+    "@types/proper-lockfile": "^4.1.4",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
   }

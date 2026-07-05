@@ -25,6 +25,7 @@ import { getArchitectureSnapshot } from "../db/queries.js";
 export type {
   InsertConcernInput,
   PatchNodeInput,
+  PatchEdgeInput,
   UpsertEdgeInput,
   UpsertNodeInput,
 } from "../db/mutations.js";
@@ -159,6 +160,11 @@ export async function persistArchitecture(
  * @throws When `mutate` throws; rolls back the DB to the pre-mutation snapshot.
  * @throws When persistence fails; rolls back the DB to the pre-mutation snapshot and
  *   attempts a best-effort file restore (original error is always re-thrown).
+ * @remarks
+ * Mutations are serialized by a process-local lock (`mutationChain`). Task idempotency,
+ * overlapping-task detection, and `archnaut.json` persistence assume a single writer per
+ * database. Run at most one server process per `.archnaut/db.sqlite` (enforced by
+ * `@archnaut/server` via `.archnaut/store.lock`).
  */
 export async function applyArchitectureMutation(
   path: string,
@@ -196,6 +202,25 @@ export async function applyArchitectureMutation(
   });
 }
 
+/**
+ * Apply a synchronous task-only mutation under the shared mutation lock.
+ *
+ * @param db - Open better-sqlite3 handle for the runtime projection.
+ * @param mutate - Synchronous function that mutates task tables in-place.
+ * @returns Resolves when the mutation completes successfully.
+ * @throws When `mutate` throws.
+ * @remarks Does not read or write `archnaut.json`; task state is SQLite-only. Uses the
+ * same process-local lock as {@link applyArchitectureMutation}; requires a single writer
+ * per database for overlapping-task detection and idempotency guarantees.
+ */
+export async function applyTaskMutation(
+  db: Database.Database,
+  mutate: () => void,
+): Promise<void> {
+  return withMutationLock(async () => {
+    db.transaction(mutate)();
+  });
+}
 /**
  * Upsert a node and persist the result to `archnaut.json`.
  *

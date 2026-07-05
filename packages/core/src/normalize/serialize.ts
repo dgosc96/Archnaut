@@ -1,20 +1,5 @@
 import type { ArchnautFileV1 } from "../schema/archnaut-file.js";
-import { compareStrings } from "./sort.js";
-
-function sortObjectKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortObjectKeys);
-  }
-  if (value !== null && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(record).sort(compareStrings)) {
-      sorted[key] = sortObjectKeys(record[key]);
-    }
-    return sorted;
-  }
-  return value;
-}
+import { sortObjectKeys } from "../json/sort-object-keys.js";
 
 /**
  * Serialize an architecture file to stable JSON text for git commits.
