@@ -146,6 +146,16 @@ function simulateClearBeforeTaskMutation(): () => void {
   return () => spy.mockRestore();
 }
 
+/** Simulates a rescan flipping an implemented node back to planned before task-only mutate runs. */
+function simulateRevertToPlannedBeforeTaskMutation(featureId: string): () => void {
+  const original = core.applyTaskMutation;
+  const spy = vi.spyOn(core, "applyTaskMutation").mockImplementation(async (db, mutate) => {
+    patchNode(db, { id: featureId, status: "planned" });
+    return original(db, mutate);
+  });
+  return () => spy.mockRestore();
+}
+
 describe("MCP task lifecycle tools", () => {
   it("begin_task success creates task and returns context", async () => {
     store = await makeStore();
@@ -716,6 +726,40 @@ describe("MCP task lifecycle tools", () => {
     expect(isError).toBe(false);
     expect(parsed?.updated).toBe(false);
     await expectStoreUnchanged(store, before, jsonBefore);
+  });
+
+  it("markimplemented reports post-lock status when node flips to planned before task mutation", async () => {
+    store = await makeStore();
+    seedStore(store);
+    const before = getArchitectureSnapshot(store.getDb());
+    await saveArchnautFile(store.getArchJsonPath(), before);
+    const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
+    server = await startServer(store, 0);
+    const port = getServerPort(server);
+
+    const restore = simulateRevertToPlannedBeforeTaskMutation("cmp.api");
+    try {
+      const res = await callTool(port, "markimplemented", { featureId: "cmp.api" });
+      const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
+      const { parsed, isError } = parseToolResult<{
+        featureId: string;
+        status: string;
+        updated: boolean;
+      }>(body);
+      expect(isError).toBe(false);
+      expect(parsed).toEqual({
+        ok: true,
+        featureId: "cmp.api",
+        status: "planned",
+        updated: false,
+      });
+      expect(getArchitectureSnapshot(store.getDb()).nodes.find((n) => n.id === "cmp.api")?.status).toBe(
+        "planned",
+      );
+      expect(await readFile(store.getArchJsonPath(), "utf8")).toBe(jsonBefore);
+    } finally {
+      restore();
+    }
   });
 
   it("markimplemented rejects node cleared before locked mutation runs", async () => {

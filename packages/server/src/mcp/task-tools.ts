@@ -425,29 +425,31 @@ async function handleMarkImplemented(
   db: Database.Database,
   featureId: string,
 ) {
-  if (getNodeStatus(db, featureId) === "implemented") {
-    await applyTaskMutation(db, () => validateNodesExist(db, [featureId]), () => {});
-    return {
-      ok: true as const,
-      featureId,
-      status: "implemented" as const,
-      updated: false,
-    };
+  const willPatchArchitecture = getNodeStatus(db, featureId) !== "implemented";
+  let updated = false;
+
+  const validate = () => validateNodesExist(db, [featureId]);
+
+  if (willPatchArchitecture) {
+    await runLockedTaskMutation(archPath, db, validate, () => {
+      if (getNodeStatus(db, featureId) === "implemented") return;
+      patchNode(db, { id: featureId, status: "implemented" });
+      updated = true;
+    });
+  } else {
+    await applyTaskMutation(db, validate, () => {
+      // task-only path — revalidate under lock via post-read; never patch here
+    });
   }
 
-  await runLockedTaskMutation(
-    archPath,
-    db,
-    () => validateNodesExist(db, [featureId]),
-    () => {
-      patchNode(db, { id: featureId, status: "implemented" });
-    },
-  );
+  const status = getNodeStatus(db, featureId);
+  if (status === null) throw new NodeNotFoundError(featureId);
+
   return {
     ok: true as const,
     featureId,
-    status: "implemented" as const,
-    updated: true,
+    status,
+    updated,
   };
 }
 
