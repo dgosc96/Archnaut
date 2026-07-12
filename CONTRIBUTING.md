@@ -80,7 +80,7 @@ Target monorepo structure (packages are being bootstrapped — see `CURRENT.md`)
   .gitignore
 ```
 
-> **Note:** `.cursor/mcp.json` is not committed yet. `@archnaut/server` can be run in-process for local dogfooding (`createStore` + `startServer` on port 7070). End-user repos receive MCP config from `archnaut init` via the rules engine.
+> **Note:** `.cursor/mcp.json` is not committed yet. `@archnaut/server` can be run in-process for local dogfooding (`RuntimeHost.open({ projectRoot }).serve({ port: 7070 })`). End-user repos receive MCP config from `archnaut init` via the rules engine.
 
 ---
 

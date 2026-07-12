@@ -1,8 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import type { Server } from "node:http";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 
 import {
   clearDb,
@@ -14,8 +10,9 @@ import {
 } from "../../core/src/index.js";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { startServer } from "../src/http.js";
-import { createStore, type Store } from "../src/store.js";
+import type { RuntimeHost } from "../src/runtime-host.js";
+import type { Store } from "../src/store.js";
+import { cleanupTempDirs, openTestHost } from "./helpers/runtime-host.js";
 
 const SEED_FILE: ArchnautFileV1 = {
   version: 1,
@@ -39,48 +36,18 @@ const SEED_FILE: ArchnautFileV1 = {
   meta: {},
 };
 
-const tempDirs: string[] = [];
-let server: Server | undefined;
-let store: Store | undefined;
+let host: RuntimeHost | undefined;
 
 afterEach(async () => {
-  if (server) {
-    await closeServer(server);
-    server = undefined;
+  if (host) {
+    await host.close();
+    host = undefined;
   }
-  if (store) {
-    store.getDb().close();
-    store = undefined;
-  }
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await cleanupTempDirs();
 });
-
-async function makeTempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "archnaut-mcp-"));
-  tempDirs.push(dir);
-  return dir;
-}
-
-async function makeStore(): Promise<Store> {
-  const dir = await makeTempDir();
-  const jsonPath = path.join(dir, "archnaut.json");
-  return createStore(jsonPath, { dbPath: ":memory:" });
-}
 
 function seedStore(s: Store): void {
   initDbFromFile(SEED_FILE, s.getDb());
-}
-
-function getServerPort(srv: Server): number {
-  const addr = srv.address();
-  if (!addr || typeof addr === "string") throw new Error("no port");
-  return addr.port;
-}
-
-async function closeServer(srv: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) =>
-    srv.close((err) => (err ? reject(err) : resolve())),
-  );
 }
 
 const MCP_TOOL_CALL_BODY = JSON.stringify({
@@ -194,9 +161,8 @@ function parseToolResult<T>(body: {
 
 describe("MCP tool annotations", () => {
   it("tools/list exposes read-only and destructive hints", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await listTools(port);
     expect(res.status).toBe(200);
@@ -219,19 +185,16 @@ describe("MCP tool annotations", () => {
 
 describe("MCP read tools", () => {
   it("getarchitecture returns HTTP 200 on unseeded store", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await callTool(port, "getarchitecture");
     expect(res.status).toBe(200);
   });
 
   it("getarchitecture returns full snapshot when seeded", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const res = await callTool(port, "getarchitecture");
     expect(res.status).toBe(200);
@@ -245,10 +208,10 @@ describe("MCP read tools", () => {
   });
 
   it("getarchitecture returns isError on empty DB", async () => {
-    store = await makeStore();
-    clearDb(store.getDb());
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ deferServe: true });
+    clearDb(host.store.getDb());
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "getarchitecture");
     expect(res.status).toBe(200);
@@ -260,14 +223,14 @@ describe("MCP read tools", () => {
   });
 
   it("getarchitecture returns distinct error when snapshot read fails", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     store
       .getDb()
       .prepare(`UPDATE nodes SET metadata_json = ? WHERE id = ?`)
       .run("{invalid", "cmp.api");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "getarchitecture");
     expect(res.status).toBe(200);
@@ -280,10 +243,8 @@ describe("MCP read tools", () => {
   });
 
   it("getcomponentcontext returns node, edges, and concerns for known id", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const res = await callTool(port, "getcomponentcontext", { id: "cmp.api" });
     expect(res.status).toBe(200);
@@ -302,10 +263,8 @@ describe("MCP read tools", () => {
   });
 
   it("getcomponentcontext returns isError for unknown id", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const res = await callTool(port, "getcomponentcontext", { id: "cmp.missing" });
     expect(res.status).toBe(200);
@@ -317,10 +276,8 @@ describe("MCP read tools", () => {
   });
 
   it("getplannedfeatures returns planned nodes and related edges", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const res = await callTool(port, "getplannedfeatures");
     expect(res.status).toBe(200);
@@ -340,10 +297,8 @@ describe("MCP read tools", () => {
   });
 
   it("handles concurrent MCP tool calls without cross-talk", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const [archRes, ctxRes, plannedRes] = await Promise.all([
       callTool(port, "getarchitecture"),
@@ -379,9 +334,8 @@ describe("MCP read tools", () => {
   });
 
   it("returns 400 for malformed JSON body", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp`, {
       method: "POST",
@@ -393,9 +347,8 @@ describe("MCP read tools", () => {
   });
 
   it("returns 400 for empty POST body", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp`, {
       method: "POST",
@@ -407,9 +360,8 @@ describe("MCP read tools", () => {
   });
 
   it("returns 413 when request body exceeds size limit", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp`, {
       method: "POST",
@@ -421,9 +373,8 @@ describe("MCP read tools", () => {
   });
 
   it("GET /health still returns 200 after MCP wiring", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
@@ -433,27 +384,24 @@ describe("MCP read tools", () => {
 
 describe("MCP DNS rebinding protection", () => {
   it("accepts requests with localhost Host header", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode } = await rawPost(port, `127.0.0.1:${port}`, MCP_TOOL_CALL_BODY);
     expect(statusCode).toBe(200);
   });
 
   it("accepts requests with bracketed IPv6 Host header", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode } = await rawPost(port, `[::1]:${port}`, MCP_TOOL_CALL_BODY);
     expect(statusCode).toBe(200);
   });
 
   it("accepts requests with bracketed IPv6 Origin header", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode } = await rawPost(
       port,
@@ -465,18 +413,16 @@ describe("MCP DNS rebinding protection", () => {
   });
 
   it("accepts requests without Origin header", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode } = await rawPost(port, `127.0.0.1:${port}`, MCP_TOOL_CALL_BODY);
     expect(statusCode).toBe(200);
   });
 
   it("rejects requests with non-localhost Host header", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode, body } = await rawPost(port, "evil.example", MCP_TOOL_CALL_BODY);
     expect(statusCode).toBe(403);
@@ -492,9 +438,8 @@ describe("MCP DNS rebinding protection", () => {
   });
 
   it("rejects requests with non-localhost Origin header", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode, body } = await rawPost(
       port,

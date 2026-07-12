@@ -1,7 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import type { Server } from "node:http";
-import os from "node:os";
-import path from "node:path";
+import { readFile } from "node:fs/promises";
 
 import * as core from "@archnaut/core";
 import {
@@ -17,9 +14,10 @@ import {
 } from "@archnaut/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { startServer } from "../src/http.js";
 import * as responses from "../src/mcp/responses.js";
-import { createStore, type Store } from "../src/store.js";
+import type { RuntimeHost } from "../src/runtime-host.js";
+import type { Store } from "../src/store.js";
+import { cleanupTempDirs, openTestHost } from "./helpers/runtime-host.js";
 
 const SEED_FILE: ArchnautFileV1 = {
   version: 1,
@@ -38,48 +36,18 @@ const SEED_FILE: ArchnautFileV1 = {
   meta: {},
 };
 
-const tempDirs: string[] = [];
-let server: Server | undefined;
-let store: Store | undefined;
+let host: RuntimeHost | undefined;
 
 afterEach(async () => {
-  if (server) {
-    await closeServer(server);
-    server = undefined;
+  if (host) {
+    await host.close();
+    host = undefined;
   }
-  if (store) {
-    store.getDb().close();
-    store = undefined;
-  }
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await cleanupTempDirs();
 });
-
-async function makeTempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "archnaut-mcp-task-"));
-  tempDirs.push(dir);
-  return dir;
-}
-
-async function makeStore(): Promise<Store> {
-  const dir = await makeTempDir();
-  const jsonPath = path.join(dir, "archnaut.json");
-  return createStore(jsonPath, { dbPath: ":memory:" });
-}
 
 function seedStore(s: Store): void {
   initDbFromFile(SEED_FILE, s.getDb());
-}
-
-function getServerPort(srv: Server): number {
-  const addr = srv.address();
-  if (!addr || typeof addr === "string") throw new Error("no port");
-  return addr.port;
-}
-
-async function closeServer(srv: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) =>
-    srv.close((err) => (err ? reject(err) : resolve())),
-  );
 }
 
 async function callTool(port: number, toolName: string, args: Record<string, unknown> = {}) {
@@ -170,10 +138,9 @@ function simulateRevertToPlannedBeforeLockedMutation(featureId: string): () => v
 
 describe("MCP task lifecycle tools", () => {
   it("begin_task success creates task and returns context", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const res = await callTool(port, "begin_task", {
       taskId: "task.ui",
@@ -199,13 +166,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task returns error for unknown node without persisting task", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "begin_task", {
       taskId: "task.bad",
@@ -222,10 +189,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task overlapping active task returns warnings and medium concern", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "begin_task", {
       taskId: "task.first",
@@ -254,8 +220,8 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task auto-abandons stale overlapping task", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const staleAt = new Date(Date.now() - TASK_STALE_MS - 60_000).toISOString();
     insertTask(store.getDb(), {
       id: "task.stale",
@@ -265,8 +231,8 @@ describe("MCP task lifecycle tools", () => {
       createdAt: staleAt,
       updatedAt: staleAt,
     });
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "begin_task", {
       taskId: "task.new",
@@ -296,8 +262,8 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task warns on fresh overlap but auto-abandons stale overlap", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const staleAt = new Date(Date.now() - TASK_STALE_MS - 60_000).toISOString();
     const freshAt = new Date().toISOString();
     insertTask(store.getDb(), {
@@ -316,8 +282,8 @@ describe("MCP task lifecycle tools", () => {
       createdAt: freshAt,
       updatedAt: freshAt,
     });
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "begin_task", {
       taskId: "task.second",
@@ -347,10 +313,8 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task rejects finalized taskId reuse", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     await callTool(port, "begin_task", {
       taskId: "task.done",
@@ -376,10 +340,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task idempotent retry returns fresh target node context", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const args = {
       taskId: "task.fresh-ctx",
@@ -412,10 +375,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task idempotent retry returns same task without duplicate row", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const args = {
       taskId: "task.idem",
@@ -434,13 +396,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task idempotent retry leaves archnaut.json unchanged", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const args = {
       taskId: "task.idem-json",
@@ -455,10 +417,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task idempotent retry succeeds when metadata keys are reordered", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const first = {
       taskId: "task.meta-idem",
@@ -490,10 +451,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task concurrent identical calls do not error", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const args = {
       taskId: "task.concurrent",
@@ -524,10 +484,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("begin_task rejects target nodes cleared before locked mutation runs", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const restore = simulateClearBeforeTaskMutation();
     try {
@@ -548,10 +507,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("complete_task rejects implemented nodes cleared before locked mutation runs", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "begin_task", {
       taskId: "task.race-complete",
@@ -578,10 +536,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("complete_task marks planned nodes implemented and persists", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "begin_task", {
       taskId: "task.ui",
@@ -616,12 +573,12 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("complete_task persists when implemented node flips to planned before locked mutate runs", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     await callTool(port, "begin_task", {
       taskId: "task.api",
@@ -657,13 +614,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("complete_task abandoned finalizes task without persisting architecture", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     await callTool(port, "begin_task", {
       taskId: "task.abandon",
@@ -685,13 +642,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("complete_task returns error for unknown task", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "complete_task", {
       taskId: "task.missing",
@@ -704,10 +661,8 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("complete_task rejects already completed task", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     await callTool(port, "begin_task", {
       taskId: "task.once",
@@ -728,10 +683,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("markimplemented updates planned node and persists", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const res = await callTool(port, "markimplemented", { featureId: "cmp.ui" });
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
@@ -753,10 +707,8 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("markimplemented returns error for unknown node", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const res = await callTool(port, "markimplemented", { featureId: "cmp.ghost" });
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
@@ -765,13 +717,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("markimplemented is no-op when already implemented", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "markimplemented", { featureId: "cmp.api" });
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
@@ -782,13 +734,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("markimplemented reports post-lock status when node flips to planned before task mutation", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const restore = simulateRevertToPlannedBeforeTaskMutation("cmp.api");
     try {
@@ -816,10 +768,8 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("markimplemented rejects node cleared before locked mutation runs", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
 
     const restore = simulateClearBeforeLockedMutation();
     try {
@@ -835,13 +785,13 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("updatearchitecture returns rescan guidance without mutation", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "updatearchitecture");
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
@@ -856,10 +806,9 @@ describe("MCP task lifecycle tools", () => {
   });
 
   it("tasks survive addnode persist", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "begin_task", {
       taskId: "task.persist",
