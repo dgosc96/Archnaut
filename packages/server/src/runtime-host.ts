@@ -77,7 +77,11 @@ export class RuntimeHost {
     return new RuntimeHost(store);
   }
 
-  /** Runtime store handle for MCP tools and tests. */
+  /**
+   * Runtime store handle for MCP tools and tests.
+   *
+   * @returns Open SQLite projection store.
+   */
   get store(): Store {
     return this.storeHandle;
   }
@@ -152,6 +156,8 @@ export class RuntimeHost {
 
   /**
    * Idempotent graceful shutdown: drain HTTP, then close the store.
+   *
+   * @returns Resolves when HTTP and store resources are released.
    */
   async close(): Promise<void> {
     if (this.shuttingDown) {

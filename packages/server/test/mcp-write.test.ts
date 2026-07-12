@@ -124,7 +124,6 @@ describe("MCP write tools", () => {
   it("cleararchitecture returns { cleared: true } on seeded store", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await callTool(port, "cleararchitecture");
     expect(res.status).toBe(200);
@@ -138,7 +137,6 @@ describe("MCP write tools", () => {
   it("cleararchitecture leaves valid empty-graph snapshot", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "cleararchitecture");
 
@@ -175,7 +173,6 @@ describe("MCP write tools", () => {
   it("addnode inserts a new node", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const addRes = await callTool(port, "addnode", {
       id: "cmp.db",
@@ -202,7 +199,6 @@ describe("MCP write tools", () => {
   it("addnode replaces an existing node", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "addnode", {
       id: "cmp.api",
@@ -265,7 +261,6 @@ describe("MCP write tools", () => {
   it("addedge inserts a new edge", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "addnode", {
       id: "cmp.db",
@@ -376,7 +371,6 @@ describe("MCP write tools", () => {
   it("setnodemetadata updates node status", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.ui", status: "implemented" });
 
@@ -405,7 +399,6 @@ describe("MCP write tools", () => {
   it("setnodemetadata updates node name", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.api", name: "API Service" });
 
@@ -421,7 +414,6 @@ describe("MCP write tools", () => {
   it("setnodemetadata updates files array", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.ui", files: ["src/ui.tsx"] });
 
@@ -454,7 +446,6 @@ describe("MCP write tools", () => {
   it("flagconcern creates a concern", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const flagRes = await callTool(port, "flagconcern", {
       scope: "cmp.api",
@@ -550,7 +541,6 @@ describe("MCP write tools", () => {
   it("GET /health still returns 200 after write tools registered", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);

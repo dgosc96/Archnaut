@@ -7,7 +7,6 @@ import {
   RuntimeHost,
   registerGracefulShutdown,
   type RouteAdapter,
-  type RouteContext,
 } from "../src/runtime-host.js";
 import { cleanupTempDirs, getTempDirs, makeTempDir, openTestHost } from "./helpers/runtime-host.js";
 
@@ -129,7 +128,7 @@ describe("RuntimeHost", () => {
       match(method, pathname) {
         return method === "GET" && pathname === "/custom";
       },
-      handle(_req: IncomingMessage, res: ServerResponse, _ctx: RouteContext) {
+      handle(_req: IncomingMessage, res: ServerResponse) {
         res.statusCode = 200;
         res.setHeader("Content-Type", "text/plain");
         res.end("custom");

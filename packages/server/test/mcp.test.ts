@@ -195,7 +195,6 @@ describe("MCP read tools", () => {
   it("getarchitecture returns full snapshot when seeded", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await callTool(port, "getarchitecture");
     expect(res.status).toBe(200);
@@ -246,7 +245,6 @@ describe("MCP read tools", () => {
   it("getcomponentcontext returns node, edges, and concerns for known id", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await callTool(port, "getcomponentcontext", { id: "cmp.api" });
     expect(res.status).toBe(200);
@@ -267,7 +265,6 @@ describe("MCP read tools", () => {
   it("getcomponentcontext returns isError for unknown id", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await callTool(port, "getcomponentcontext", { id: "cmp.missing" });
     expect(res.status).toBe(200);
@@ -281,7 +278,6 @@ describe("MCP read tools", () => {
   it("getplannedfeatures returns planned nodes and related edges", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await callTool(port, "getplannedfeatures");
     expect(res.status).toBe(200);
@@ -303,7 +299,6 @@ describe("MCP read tools", () => {
   it("handles concurrent MCP tool calls without cross-talk", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const [archRes, ctxRes, plannedRes] = await Promise.all([
       callTool(port, "getarchitecture"),

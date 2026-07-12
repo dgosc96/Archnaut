@@ -315,7 +315,6 @@ describe("MCP task lifecycle tools", () => {
   it("begin_task rejects finalized taskId reuse", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "begin_task", {
       taskId: "task.done",
@@ -664,7 +663,6 @@ describe("MCP task lifecycle tools", () => {
   it("complete_task rejects already completed task", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     await callTool(port, "begin_task", {
       taskId: "task.once",
@@ -711,7 +709,6 @@ describe("MCP task lifecycle tools", () => {
   it("markimplemented returns error for unknown node", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const res = await callTool(port, "markimplemented", { featureId: "cmp.ghost" });
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
@@ -773,7 +770,6 @@ describe("MCP task lifecycle tools", () => {
   it("markimplemented rejects node cleared before locked mutation runs", async () => {
     host = await openTestHost({ seed: seedStore });
     const port = host.getPort();
-    const store = host.store;
 
     const restore = simulateClearBeforeLockedMutation();
     try {

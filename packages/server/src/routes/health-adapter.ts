@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { sendJson } from "../http.js";
-import type { RouteAdapter, RouteContext } from "../runtime-host.js";
+import type { RouteAdapter } from "../runtime-host.js";
 
 /** Marker for built-in health adapter deduplication in {@link RuntimeHost.serve}. */
 export const HEALTH_ADAPTER_KIND = "health" as const;
@@ -17,7 +17,7 @@ export function createHealthAdapter(): RouteAdapter & { readonly kind: typeof HE
     match(method: string, pathname: string): boolean {
       return method === "GET" && pathname === "/health";
     },
-    handle(_req: IncomingMessage, res: ServerResponse, _ctx: RouteContext): void {
+    handle(_req: IncomingMessage, res: ServerResponse): void {
       sendJson(res, 200, { ok: true, uptime: process.uptime() });
     },
   };
