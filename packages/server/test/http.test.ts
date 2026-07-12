@@ -1,53 +1,19 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import type { Server } from "node:http";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createHttpServer, startServer } from "../src/http.js";
-import { createStore, type Store } from "../src/store.js";
+import type { RuntimeHost } from "../src/runtime-host.js";
+import { cleanupTempDirs, openTestHost } from "./helpers/runtime-host.js";
 
-const tempDirs: string[] = [];
-let server: Server | undefined;
-let store: Store | undefined;
+let host: RuntimeHost | undefined;
 
 afterEach(async () => {
-  if (server) {
-    await closeServer(server);
-    server = undefined;
+  if (host) {
+    await host.close();
+    host = undefined;
   }
-  if (store) {
-    store.getDb().close();
-    store = undefined;
-  }
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await cleanupTempDirs();
 });
-
-async function makeTempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "archnaut-http-"));
-  tempDirs.push(dir);
-  return dir;
-}
-
-async function makeStore(): Promise<Store> {
-  const dir = await makeTempDir();
-  const jsonPath = path.join(dir, "archnaut.json");
-  return createStore(jsonPath, { dbPath: ":memory:" });
-}
-
-function getServerPort(srv: Server): number {
-  const addr = srv.address();
-  if (!addr || typeof addr === "string") throw new Error("no port");
-  return addr.port;
-}
-
-async function closeServer(srv: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) =>
-    srv.close((err) => (err ? reject(err) : resolve())),
-  );
-}
 
 /** Send a raw HTTP/1.1 GET with an arbitrary request-target (for malformed URL cases). */
 async function rawGet(port: number, requestTarget: string): Promise<{ statusCode: number; body: string }> {
@@ -94,17 +60,15 @@ async function rawGet(port: number, requestTarget: string): Promise<{ statusCode
   });
 }
 
-describe("http server", () => {
-  it("startServer resolves when listening", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    expect(server.listening).toBe(true);
+describe("http server via RuntimeHost", () => {
+  it("serve resolves when listening", async () => {
+    host = await openTestHost();
+    expect(host.getPort()).toBeGreaterThan(0);
   });
 
   it("GET /health returns 200 JSON", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
@@ -116,9 +80,8 @@ describe("http server", () => {
   });
 
   it("GET /does-not-exist returns 404 JSON", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const res = await fetch(`http://127.0.0.1:${port}/does-not-exist`);
     expect(res.status).toBe(404);
@@ -127,26 +90,11 @@ describe("http server", () => {
   });
 
   it("returns 404 for malformed request-target without crashing", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
 
     const { statusCode, body } = await rawGet(port, "http://[::1");
     expect(statusCode).toBe(404);
     expect(JSON.parse(body)).toEqual({ error: "Not Found" });
-  });
-
-  it("createHttpServer listens without startServer", async () => {
-    store = await makeStore();
-    server = createHttpServer(store);
-    await new Promise<void>((resolve, reject) => {
-      server!.once("error", reject);
-      server!.listen(0, () => resolve());
-    });
-    const port = getServerPort(server);
-
-    const res = await fetch(`http://127.0.0.1:${port}/health`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, uptime: expect.any(Number) });
   });
 });

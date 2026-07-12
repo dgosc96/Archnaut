@@ -1,6 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import type { Server } from "node:http";
-import os from "node:os";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -9,10 +7,12 @@ import {
   saveArchnautFile,
   type ArchnautFileV1,
 } from "@archnaut/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { startServer } from "../src/http.js";
-import { createStore, type Store } from "../src/store.js";
+import * as core from "@archnaut/core";
+import type { RuntimeHost } from "../src/runtime-host.js";
+import type { Store } from "../src/store.js";
+import { cleanupTempDirs, openTestHost } from "./helpers/runtime-host.js";
 
 const SEED_FILE: ArchnautFileV1 = {
   version: 1,
@@ -27,48 +27,18 @@ const SEED_FILE: ArchnautFileV1 = {
   meta: {},
 };
 
-const tempDirs: string[] = [];
-let server: Server | undefined;
-let store: Store | undefined;
+let host: RuntimeHost | undefined;
 
 afterEach(async () => {
-  if (server) {
-    await closeServer(server);
-    server = undefined;
+  if (host) {
+    await host.close();
+    host = undefined;
   }
-  if (store) {
-    store.getDb().close();
-    store = undefined;
-  }
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await cleanupTempDirs();
 });
-
-async function makeTempDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "archnaut-mcp-write-"));
-  tempDirs.push(dir);
-  return dir;
-}
-
-async function makeStore(): Promise<Store> {
-  const dir = await makeTempDir();
-  const jsonPath = path.join(dir, "archnaut.json");
-  return createStore(jsonPath, { dbPath: ":memory:" });
-}
 
 function seedStore(s: Store): void {
   initDbFromFile(SEED_FILE, s.getDb());
-}
-
-function getServerPort(srv: Server): number {
-  const addr = srv.address();
-  if (!addr || typeof addr === "string") throw new Error("no port");
-  return addr.port;
-}
-
-async function closeServer(srv: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) =>
-    srv.close((err) => (err ? reject(err) : resolve())),
-  );
 }
 
 async function callTool(port: number, toolName: string, args: Record<string, unknown> = {}) {
@@ -115,9 +85,9 @@ function parseToolResult<T>(body: {
 
 describe("MCP write tools", () => {
   it("bootstrap write tools work on fresh store without archnaut.json", async () => {
-    store = await makeStore();
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost();
+    const port = host.getPort();
+    const store = host.store;
 
     const clearRes = await callTool(port, "cleararchitecture");
     expect(clearRes.status).toBe(200);
@@ -152,10 +122,9 @@ describe("MCP write tools", () => {
   });
 
   it("cleararchitecture returns { cleared: true } on seeded store", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const res = await callTool(port, "cleararchitecture");
     expect(res.status).toBe(200);
@@ -167,10 +136,9 @@ describe("MCP write tools", () => {
   });
 
   it("cleararchitecture leaves valid empty-graph snapshot", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "cleararchitecture");
 
@@ -188,11 +156,11 @@ describe("MCP write tools", () => {
   });
 
   it("cleararchitecture persists cleared graph to archnaut.json", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     await saveArchnautFile(store.getArchJsonPath(), SEED_FILE);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     await callTool(port, "cleararchitecture");
 
@@ -205,10 +173,9 @@ describe("MCP write tools", () => {
   });
 
   it("addnode inserts a new node", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const addRes = await callTool(port, "addnode", {
       id: "cmp.db",
@@ -233,10 +200,9 @@ describe("MCP write tools", () => {
   });
 
   it("addnode replaces an existing node", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "addnode", {
       id: "cmp.api",
@@ -255,10 +221,9 @@ describe("MCP write tools", () => {
   });
 
   it("addnode persists to archnaut.json on disk", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "addnode", {
       id: "cmp.db",
@@ -273,13 +238,13 @@ describe("MCP write tools", () => {
   });
 
   it("addnode returns error for unknown workspaceId", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "addnode", {
       id: "cmp.new",
@@ -298,10 +263,9 @@ describe("MCP write tools", () => {
   });
 
   it("addedge inserts a new edge", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "addnode", {
       id: "cmp.db",
@@ -332,10 +296,9 @@ describe("MCP write tools", () => {
   });
 
   it("addedge persists to archnaut.json on disk", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "addnode", {
       id: "cmp.db",
@@ -365,13 +328,13 @@ describe("MCP write tools", () => {
   });
 
   it("addedge returns error when from node does not exist", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "addedge", {
       id: "edge.ghost-api",
@@ -388,13 +351,13 @@ describe("MCP write tools", () => {
   });
 
   it("addedge returns error when to node does not exist", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "addedge", {
       id: "edge.api-ghost",
@@ -411,10 +374,9 @@ describe("MCP write tools", () => {
   });
 
   it("setnodemetadata updates node status", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.ui", status: "implemented" });
 
@@ -428,10 +390,9 @@ describe("MCP write tools", () => {
   });
 
   it("setnodemetadata persists to archnaut.json on disk", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.ui", status: "implemented" });
 
@@ -442,10 +403,9 @@ describe("MCP write tools", () => {
   });
 
   it("setnodemetadata updates node name", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.api", name: "API Service" });
 
@@ -459,10 +419,9 @@ describe("MCP write tools", () => {
   });
 
   it("setnodemetadata updates files array", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "setnodemetadata", { id: "cmp.ui", files: ["src/ui.tsx"] });
 
@@ -476,13 +435,13 @@ describe("MCP write tools", () => {
   });
 
   it("setnodemetadata returns error for unknown node", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "setnodemetadata", { id: "cmp.ghost", name: "Ghost" });
     const body = (await res.json()) as Parameters<typeof parseToolResult>[0];
@@ -493,10 +452,9 @@ describe("MCP write tools", () => {
   });
 
   it("flagconcern creates a concern", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const flagRes = await callTool(port, "flagconcern", {
       scope: "cmp.api",
@@ -523,10 +481,9 @@ describe("MCP write tools", () => {
   });
 
   it("flagconcern persists to archnaut.json on disk", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     await callTool(port, "flagconcern", {
       scope: "cmp.api",
@@ -540,13 +497,13 @@ describe("MCP write tools", () => {
   });
 
   it("flagconcern returns error when scope node does not exist", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     await saveArchnautFile(store.getArchJsonPath(), before);
     const jsonBefore = await readFile(store.getArchJsonPath(), "utf8");
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "flagconcern", {
       scope: "cmp.missing",
@@ -560,20 +517,19 @@ describe("MCP write tools", () => {
   });
 
   it("addnode rolls back DB and leaves archnaut.json unchanged when persist fails", async () => {
-    store = await makeStore();
-    seedStore(store);
+    host = await openTestHost({ seed: seedStore, deferServe: true });
+    const store = host.store;
     const before = getArchitectureSnapshot(store.getDb());
     const jsonPath = store.getArchJsonPath();
     await saveArchnautFile(jsonPath, before);
     const jsonBefore = await readFile(jsonPath, "utf8");
-    const badJsonPath = path.join(path.dirname(jsonPath), "missing-parent", "archnaut.json");
-
-    const blockedStore = {
-      getDb: () => store!.getDb(),
-      getArchJsonPath: () => badJsonPath,
-    };
-    server = await startServer(blockedStore, 0);
-    const port = getServerPort(server);
+    const original = core.applyArchitectureMutation;
+    const mutationSpy = vi.spyOn(core, "applyArchitectureMutation").mockImplementation(
+      async (archPath, db, mutate) =>
+        original(path.join(path.dirname(archPath), "missing-parent", "archnaut.json"), db, mutate),
+    );
+    await host.serve({ port: 0 });
+    const port = host.getPort();
 
     const res = await callTool(port, "addnode", {
       id: "cmp.db",
@@ -588,13 +544,13 @@ describe("MCP write tools", () => {
     expect(isError).toBe(true);
 
     await expectStoreUnchanged(store, before, jsonBefore);
+    mutationSpy.mockRestore();
   });
 
   it("GET /health still returns 200 after write tools registered", async () => {
-    store = await makeStore();
-    seedStore(store);
-    server = await startServer(store, 0);
-    const port = getServerPort(server);
+    host = await openTestHost({ seed: seedStore });
+    const port = host.getPort();
+    const store = host.store;
 
     const res = await fetch(`http://127.0.0.1:${port}/health`);
     expect(res.status).toBe(200);
