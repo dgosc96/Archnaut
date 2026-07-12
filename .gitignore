@@ -42,3 +42,8 @@ docs/superpowers/
 # MemPalace per-project files
 mempalace.yaml
 entities.json
+AGENTS.md
+docs/agents/
+docs/wayfinder/
+graphify-out/
+.cursor/rules/graphify.mdc

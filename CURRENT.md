@@ -28,7 +28,13 @@
 ### `packages/server` (`@archnaut/server`) — runtime store + HTTP + MCP tools
 
 - `createStore(archJsonPath, options?)` → opens SQLite at `.archnaut/db.sqlite` (or `:memory:` in tests), migrates schema, hydrates from `archnaut.json` if present
-- `createHttpServer(store)` / `startServer(store, port)` — single-port Node `http` server
+- **`RuntimeHost`** — deep server lifecycle module (`open` → `registerRoute` → `serve` → `close`):
+  - `RuntimeHost.open({ projectRoot, dbPath? })` — derives `archnaut.json` + `.archnaut/db.sqlite` paths
+  - `host.serve({ port })` — listens; auto-registers `HealthAdapter` + `McpAdapter`
+  - `host.registerRoute(adapter)` — extension point (frozen after `serve()`)
+  - `host.close()` — 5s HTTP drain + `store.close()` (idempotent)
+  - `registerGracefulShutdown(host)` — SIGTERM/SIGINT → `close()` → exit
+  - Module layout: `runtime-host.ts`, `shutdown.ts`, `routes/health-adapter.ts`, `routes/mcp-adapter.ts`, slim `http.ts` helpers
 - `GET /health` → `{ ok: true, uptime: number }`
 - `POST /api/mcp` — MCP Streamable HTTP transport (`@modelcontextprotocol/sdk`); MCP code split into `src/mcp/` (`http.ts`, `responses.ts`, `tools.ts`, `task-tools.ts`, `index.ts`)
 - **Read tools:**
@@ -51,7 +57,7 @@
 - DNS rebinding protection on `/api/mcp` (Host + Origin allowlist)
 - Request body hardening: 1 MiB size limit (413 Payload Too Large), empty body 400, malformed JSON 400
 - Structured error logging on MCP handler failures (TODO: wire to package logger)
-- 62 vitest tests passing (MCP read + write + task lifecycle + DNS rebinding + HTTP regression); `pnpm build` succeeds
+- 91 vitest tests passing (store + RuntimeHost lifecycle + MCP read/write/task + HTTP); `pnpm build` succeeds
 
 ## Not yet built
 
@@ -64,4 +70,4 @@
 
 ## Next immediate step
 
-Proceed to `packages/cli` (daemon fork, `archnaut start/stop/status/init`).
+Proceed to `packages/cli` (daemon fork, `archnaut start/stop/status/init`). Daemon entry should use `RuntimeHost.open({ projectRoot }).serve({ port }); registerGracefulShutdown(host)`.
